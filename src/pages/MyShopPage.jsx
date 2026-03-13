@@ -1,6 +1,7 @@
 import React from "react";
 import { MyShopService } from "../services/MyShopService";
 import { ShopProduct } from "../models/ShopProduct";
+import { ProductCategory } from "../models/ProductCategory";
 
 export class MyShopPage extends React.Component {
   state = {
@@ -309,6 +310,9 @@ class ProductCard extends React.Component {
 
         <div className="pt-3 space-y-1">
           <div className="font-semibold break-words">{product.name || "ไม่ระบุชื่อสินค้า"}</div>
+          <div className="inline-flex w-fit rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-700">
+            {ProductCategory.getLabel(product.category)}
+          </div>
           <div className="text-sm font-medium text-zinc-700">{product.getPriceLabel()}</div>
           <p className="text-sm text-zinc-500 whitespace-pre-line break-words">
             {product.description || "ไม่มีคำอธิบาย"}
@@ -370,6 +374,22 @@ class CreateProductModal extends React.Component {
                 value={draftProduct.name}
                 onChange={(e) => onChangeField?.("name", e.target.value)}
               />
+            </label>
+
+            <label className="space-y-1">
+              <div className="text-sm text-zinc-600">หมวดหมู่สินค้า</div>
+              <select
+                className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none"
+                value={draftProduct.category}
+                onChange={(e) => onChangeField?.("category", e.target.value)}
+              >
+                <option value="">เลือกหมวดหมู่</option>
+                {ProductCategory.list().map((category) => (
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
+                ))}
+              </select>
             </label>
 
             <label className="space-y-1">

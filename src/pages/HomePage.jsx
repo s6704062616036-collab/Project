@@ -1,6 +1,7 @@
 import React from "react";
 import { UserService } from "../services/UserService";
 import { MyShopService } from "../services/MyShopService";
+import { ProductCategory } from "../models/ProductCategory";
 
 export class HomePage extends React.Component {
   state = {
@@ -14,6 +15,7 @@ export class HomePage extends React.Component {
     productsError: "",
     products: [],
     searchKeyword: "",
+    selectedCategory: ProductCategory.ALL,
   };
 
   userService = UserService.instance();
@@ -91,14 +93,23 @@ export class HomePage extends React.Component {
     this.props.onSearch?.(value);
   };
 
+  onCategoryChange = (category) => {
+    this.setState({ selectedCategory: category });
+    this.props.onPickCategory?.(category);
+  };
+
   getFilteredProducts() {
-    const { products, searchKeyword } = this.state;
+    const { products, searchKeyword, selectedCategory } = this.state;
     const keyword = (searchKeyword ?? "").trim().toLowerCase();
-    if (!keyword) return products;
 
     return products.filter((product) => {
       const text = `${product?.name ?? ""} ${product?.description ?? ""}`.toLowerCase();
-      return text.includes(keyword);
+      const matchKeyword = !keyword || text.includes(keyword);
+      const matchCategory =
+        ProductCategory.isAll(selectedCategory) ||
+        ProductCategory.normalize(product?.category) === selectedCategory;
+
+      return matchKeyword && matchCategory;
     });
   }
 
@@ -144,6 +155,7 @@ export class HomePage extends React.Component {
       avatarFile,
       loadingProducts,
       productsError,
+      selectedCategory,
     } = this.state;
     const user = this.props.user ?? {};
     const filteredProducts = this.getFilteredProducts();
@@ -151,7 +163,19 @@ export class HomePage extends React.Component {
     return (
       <div className="min-h-dvh bg-zinc-50">
         <div className="sticky top-0 z-40 bg-[#A4E3D8] border-b border-zinc-200">
-          <div className="mx-auto max-w-6xl px-4 py-3 flex items-center gap-3">
+          <div className="mx-auto max-w-350 px-4 py-5 flex items-center gap-8">
+            <button
+              type="button"
+              onClick={this.props.onGoHome}
+              title="กลับหน้าแรก"
+              className="shrink-0 rounded-xl border border-zinc-200 bg-white p-0"
+            >
+              <img
+                src="/App logo.jpg"
+                alt="App logo"
+                className="h-20 w-20 rounded-xl object-cover"
+              />
+            </button>
             <input
               className="flex-1 rounded-xl border bg-white border-zinc-200 px-3 py-2 text-sm outline-none"
               placeholder="ค้นหาสินค้า..."
@@ -176,34 +200,38 @@ export class HomePage extends React.Component {
           </div>
         </div>
 
-        <div className="mx-auto max-w-6xl px-4 py-6 space-y-6">
+        <div className="mx-auto max-w-7xl px-4 py-6 space-y-6">
           <HomeBanner />
+        </div>
+        <div className="mx-auto max-w-375 px-4 py-6 space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-[15rem_minmax(0,1fr)] gap-6">
+            <CategorySidebar
+              selectedCategory={selectedCategory}
+              onSelectCategory={this.onCategoryChange}
+            />
 
-          <div className="rounded-2xl bg-white shadow p-4 md:p-6 space-y-4">
-            <div className="flex items-center justify-between gap-3">
-            
+            <div className="rounded-2xl bg-white shadow p-4 md:p-6 space-y-4">
+              {loadingProducts ? <div className="text-sm text-zinc-500">กำลังโหลดสินค้าจากฐานข้อมูล...</div> : null}
+              {productsError ? (
+                <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                  {productsError}
+                </div>
+              ) : null}
+
+              {!loadingProducts && !filteredProducts.length ? (
+                <div className="rounded-xl border border-dashed border-zinc-300 bg-zinc-50 p-6 text-center text-sm text-zinc-500">
+                  ยังไม่มีสินค้าที่ลงขาย
+                </div>
+              ) : null}
+
+              {!loadingProducts && filteredProducts.length ? (
+                <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-4">
+                  {filteredProducts.map((product, index) => (
+                    <HomeProductCard key={product.id || `${product.name}-${index}`} product={product} />
+                  ))}
+                </div>
+              ) : null}
             </div>
-
-            {loadingProducts ? <div className="text-sm text-zinc-500">กำลังโหลดสินค้าจากฐานข้อมูล...</div> : null}
-            {productsError ? (
-              <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-                {productsError}
-              </div>
-            ) : null}
-
-            {!loadingProducts && !filteredProducts.length ? (
-              <div className="rounded-xl border border-dashed border-zinc-300 bg-zinc-50 p-6 text-center text-sm text-zinc-500">
-                ยังไม่มีสินค้าที่ลงขาย
-              </div>
-            ) : null}
-
-            {!loadingProducts && filteredProducts.length ? (
-              <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-4">
-                {filteredProducts.map((product, index) => (
-                  <HomeProductCard key={product.id || `${product.name}-${index}`} product={product} />
-                ))}
-              </div>
-            ) : null}
           </div>
         </div>
 
@@ -234,11 +262,39 @@ export class HomePage extends React.Component {
   }
 }
 
+class CategorySidebar extends React.Component {
+  render() {
+    const { selectedCategory, onSelectCategory } = this.props;
+    const categories = ProductCategory.listWithAll();
+
+    return (
+      <aside className="rounded-2xl bg-white shadow p-3 md:p-4">
+        <div className="text-sm font-semibold text-zinc-800 px-2 pb-2">หมวดหมู่</div>
+        <div className="space-y-1">
+          {categories.map((category) => {
+            const active = category === selectedCategory;
+            return (
+              <button
+                key={category}
+                type="button"
+                className={`w-full rounded-xl px-3 py-2 text-left text-sm transition ${active ? "bg-zinc-900 text-white" : "bg-zinc-50 text-zinc-700 hover:bg-zinc-100"}`}
+                onClick={() => onSelectCategory?.(category)}
+              >
+                {ProductCategory.getLabel(category)}
+              </button>
+            );
+          })}
+        </div>
+      </aside>
+    );
+  }
+}
+
 class HomeBanner extends React.Component {
   render() {
     return (
-      <section className="rounded-3xl bg-gradient-to-r from-cyan-300 via-sky-300 to-emerald-300 p-6 md:p-8 shadow">
-        <div className="max-w-3xl space-y-2">
+      <section className="rounded-xl bg-gradient-to-r from-cyan-300 via-sky-300 to-emerald-300 p-6 md:p-8 shadow">
+        <div className="max-w-xl space-y-20">
           <div className="inline-flex rounded-full bg-white/80 px-3 py-1 text-xs font-semibold text-zinc-700">
             Banner โฆษณา
           </div>
@@ -257,6 +313,7 @@ class HomeProductCard extends React.Component {
     const { product } = this.props;
     return (
       <article className="rounded-2xl border border-zinc-200 p-3 bg-white">
+        
         <div className="aspect-square rounded-xl bg-zinc-100 overflow-hidden grid place-items-center">
           {product?.imageUrl ? (
             <img src={product.imageUrl} alt={product?.name ?? "product"} className="h-full w-full object-cover" />
@@ -266,6 +323,9 @@ class HomeProductCard extends React.Component {
         </div>
         <div className="pt-3 space-y-1">
           <div className="font-semibold text-zinc-800 line-clamp-2 break-words">{product?.name || "ไม่ระบุชื่อสินค้า"}</div>
+          <div className="inline-flex w-fit rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-700">
+            {ProductCategory.getLabel(product?.category)}
+          </div>
           <div className="text-sm font-medium text-zinc-700">{product?.getPriceLabel?.() ?? "฿0.00"}</div>
         </div>
       </article>
@@ -281,8 +341,8 @@ class ProfilePopup extends React.Component {
 
     return (
       <div className="fixed inset-0 z-50" onClick={onClose}>
-        <div className="absolute right-4 top-16 w-[20rem] max-w-[calc(100vw-2rem)]" onClick={this.stop}>
-          <div className="absolute -top-1.5 right-6 h-3 w-3 rotate-45 bg-white border-l border-t border-zinc-200" />
+        <div className="absolute right-5 top-23 w-[20rem] max-w-[calc(100vw-2rem)]" onClick={this.stop}>
+          <div className="absolute -top-1.5 right-19 h-3 w-3 rotate-45 bg-white border-l border-t border-zinc-200" />
           <div className="rounded-3xl border border-zinc-200 bg-white shadow-xl p-4 space-y-4">
             <div className="rounded-2xl bg-zinc-50 p-3">
               <div className="flex items-center gap-3">

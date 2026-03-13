@@ -1,8 +1,11 @@
+import { ProductCategory } from "./ProductCategory";
+
 export class ShopProduct {
   constructor({
     id,
     ownerId,
     name,
+    category,
     imageUrl,
     imageUrls,
     price,
@@ -17,6 +20,7 @@ export class ShopProduct {
     this.id = id ?? "";
     this.ownerId = ownerId ?? "";
     this.name = name ?? "";
+    this.category = ProductCategory.normalize(category);
     this.imageUrl = normalizedImageUrls[0] ?? "";
     this.imageUrls = normalizedImageUrls;
     this.price = price ?? "";
@@ -45,6 +49,7 @@ export class ShopProduct {
   static empty() {
     return new ShopProduct({
       name: "",
+      category: "",
       imageUrl: "",
       imageUrls: [],
       price: "",
@@ -69,6 +74,7 @@ export class ShopProduct {
       id: json?.id ?? json?._id,
       ownerId: json?.ownerId,
       name: json?.name ?? json?.productName,
+      category: json?.category ?? json?.productCategory ?? json?.categoryName,
       imageUrl,
       imageUrls,
       price: json?.price,
@@ -111,6 +117,7 @@ export class ShopProduct {
         : [];
 
     if (!this.name.trim()) return "กรุณากรอกชื่อสินค้า";
+    if (!ProductCategory.isValid(this.category)) return "กรุณาเลือกหมวดหมู่สินค้า";
     if (this.getPriceNumber() <= 0) return "กรุณากรอกราคาสินค้าให้มากกว่า 0";
     if (!selectedFiles.length && !this.getImageUrls().length) return "กรุณาอัปโหลดรูปภาพสินค้า";
     return "";
@@ -119,6 +126,7 @@ export class ShopProduct {
   toPayload() {
     return {
       name: this.name.trim(),
+      category: this.category,
       price: this.getPriceNumber(),
       description: this.description.trim(),
     };

@@ -51,6 +51,7 @@ export class MyShopService {
   async createProduct(payload, imageFiles) {
     const formData = new FormData();
 
+    // payload (รวม category) จะถูกส่งให้ backend เพื่อ persist ลง database
     Object.entries(payload ?? {}).forEach(([key, value]) => {
       formData.append(key, value ?? "");
     });

@@ -91,7 +91,9 @@ export default class App extends React.Component {
         onToggleMenu={() => console.log("menu")}
         onUpdatedUser={this.onUpdatedUser} // ✅ เพิ่ม
         onGoMyShop={this.onGoMyShop}
+        onGoHome={this.onBackHome}
       />
     );
   }
 }
+
