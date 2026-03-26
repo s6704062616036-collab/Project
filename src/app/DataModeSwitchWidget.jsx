@@ -26,7 +26,7 @@ export class DataModeSwitchWidget extends React.Component {
   render() {
     if (import.meta.env.VITE_HIDE_DATA_MODE_SWITCH === "true") return null;
 
-    const isMockMode = this.state.mode === DataModeSwitch.MOCK_MODE;
+    const isNoDatabaseMode = this.state.mode === DataModeSwitch.NO_DATABASE_MODE;
     return (
       <div className="fixed bottom-4 right-4 z-[90] rounded-2xl border border-zinc-200 bg-white/95 px-3 py-2 shadow-lg backdrop-blur">
         <div className="flex items-center gap-3">
@@ -34,10 +34,10 @@ export class DataModeSwitchWidget extends React.Component {
           <button
             type="button"
             onClick={this.onToggleMode}
-            className={`rounded-full px-3 py-1 text-xs font-semibold transition ${isMockMode ? "bg-emerald-500 text-white" : "bg-zinc-900 text-white"}`}
-            title="สลับโหมดฐานข้อมูล"
+            className={`rounded-full px-3 py-1 text-xs font-semibold transition ${isNoDatabaseMode ? "bg-emerald-500 text-white" : "bg-zinc-900 text-white"}`}
+            title="สลับโหมดใช้ฐานข้อมูล / ไม่ใช้ฐานข้อมูล"
           >
-            {isMockMode ? "MOCK" : "DB"}
+            {isNoDatabaseMode ? "NO-DB" : "DB"}
           </button>
         </div>
       </div>

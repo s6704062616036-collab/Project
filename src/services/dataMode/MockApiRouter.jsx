@@ -90,8 +90,21 @@ export class MockApiRouter {
     }
 
     // ---------- Chat ----------
+    if (normalizedMethod === "GET" && pathname === "/api/chats") {
+      return this.store.listMyChats();
+    }
     if (normalizedMethod === "POST" && pathname === "/api/chats") {
       return this.store.startProductChat(body);
+    }
+    if (pathname.startsWith("/api/chats/") && pathname.endsWith("/messages")) {
+      const rawChatId = pathname.slice("/api/chats/".length, -"/messages".length);
+      const chatId = decodeURIComponent(rawChatId);
+      if (normalizedMethod === "GET") {
+        return this.store.listChatMessages(chatId);
+      }
+      if (normalizedMethod === "POST") {
+        return this.store.sendChatMessage(chatId, body);
+      }
     }
 
     throw new Error(`Mock API ยังไม่รองรับ ${normalizedMethod} ${pathname}`);

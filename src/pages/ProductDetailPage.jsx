@@ -3,6 +3,7 @@ import { ShopProduct } from "../models/ShopProduct";
 import { ProductCategory } from "../models/ProductCategory";
 import { MyShopService } from "../services/MyShopService";
 import { CartService } from "../services/CartService";
+import { ChatService } from "../services/ChatService";
 import { CartPopup, ProfilePopup } from "../components/HeaderActionPopups";
 
 export class ProductDetailPage extends React.Component {
@@ -26,6 +27,7 @@ export class ProductDetailPage extends React.Component {
 
   myShopService = MyShopService.instance();
   cartService = CartService.instance();
+  chatService = ChatService.instance();
 
   componentDidMount() {
     this.syncProductFromDatabase();
@@ -137,24 +139,31 @@ export class ProductDetailPage extends React.Component {
       actionDone: "",
     });
 
+    let nextChatId = "";
     try {
-      const result = await this.myShopService.startProductChat({
+      const result = await this.chatService.startChat({
         productId: product.id,
         ownerId: product.ownerId,
         message: `สนใจสินค้า ${product?.name ?? ""}`.trim(),
       });
 
-      this.setState({
-        actionDone: result?.chatId
-          ? `สร้างห้องแชทแล้ว (chatId: ${result.chatId})`
-          : "สร้างห้องแชทกับร้านค้าแล้ว",
-      });
+      if (result?.chatId) {
+        nextChatId = result.chatId;
+      } else {
+        this.setState({
+          actionDone: "สร้างห้องแชทกับร้านค้าแล้ว",
+        });
+      }
     } catch (e) {
       this.setState({
         actionError: e?.message ?? "เริ่มแชทกับร้านค้าไม่สำเร็จ",
       });
     } finally {
-      this.setState({ openingChat: false });
+      this.setState({ openingChat: false }, () => {
+        if (nextChatId) {
+          this.props.onGoChat?.({ chatId: nextChatId });
+        }
+      });
     }
   };
 
@@ -302,6 +311,14 @@ export class ProductDetailPage extends React.Component {
               title="ตะกร้า"
             >
               🛒
+            </button>
+
+            <button
+              className="h-10 w-10 rounded-xl bg-[#F4D03E] border border-zinc-200 grid place-items-center"
+              onClick={() => this.props.onGoChat?.()}
+              title="แชท"
+            >
+              💬
             </button>
 
             <button

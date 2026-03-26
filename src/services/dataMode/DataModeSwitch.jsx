@@ -1,14 +1,30 @@
 const DATA_MODE_STORAGE_KEY = "myweb:data-mode";
 
 export class DataModeSwitch {
-  static API_MODE = "api";
-  static MOCK_MODE = "mock";
+  static DATABASE_MODE = "database";
+  static NO_DATABASE_MODE = "no-database";
+  static API_MODE = DataModeSwitch.DATABASE_MODE; // backward compatibility
+  static MOCK_MODE = DataModeSwitch.NO_DATABASE_MODE; // backward compatibility
   static #listeners = new Set();
 
   static normalize(mode) {
-    return mode === DataModeSwitch.MOCK_MODE
-      ? DataModeSwitch.MOCK_MODE
-      : DataModeSwitch.API_MODE;
+    const normalized = `${mode ?? ""}`.trim().toLowerCase();
+
+    if (
+      [
+        "mock",
+        "no-db",
+        "no_database",
+        "nodb",
+        "without-db",
+        "without_database",
+        DataModeSwitch.NO_DATABASE_MODE,
+      ].includes(normalized)
+    ) {
+      return DataModeSwitch.NO_DATABASE_MODE;
+    }
+
+    return DataModeSwitch.DATABASE_MODE;
   }
 
   static getDefaultMode() {
@@ -22,7 +38,15 @@ export class DataModeSwitch {
   }
 
   static isMockMode() {
-    return DataModeSwitch.getMode() === DataModeSwitch.MOCK_MODE;
+    return DataModeSwitch.isNoDatabaseMode();
+  }
+
+  static isDatabaseMode() {
+    return DataModeSwitch.getMode() === DataModeSwitch.DATABASE_MODE;
+  }
+
+  static isNoDatabaseMode() {
+    return DataModeSwitch.getMode() === DataModeSwitch.NO_DATABASE_MODE;
   }
 
   static setMode(mode) {
@@ -45,7 +69,9 @@ export class DataModeSwitch {
 
   static toggle() {
     return DataModeSwitch.setMode(
-      DataModeSwitch.isMockMode() ? DataModeSwitch.API_MODE : DataModeSwitch.MOCK_MODE,
+      DataModeSwitch.isNoDatabaseMode()
+        ? DataModeSwitch.DATABASE_MODE
+        : DataModeSwitch.NO_DATABASE_MODE,
     );
   }
 

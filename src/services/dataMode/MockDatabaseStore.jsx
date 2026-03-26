@@ -81,10 +81,75 @@ const toPayloadObject = (payload) => {
   return {};
 };
 
+const normalizeChatMessageRecord = (messageInput = {}, defaultSenderId = "", fallbackCreatedAt = nowIso()) => {
+  const message = messageInput && typeof messageInput === "object" ? messageInput : {};
+  const createdAt = safeText(message.createdAt) || fallbackCreatedAt;
+  const text = safeText(message.text ?? message.message);
+  const imageUrl = normalizeImageUrl(message.imageUrl ?? message.image, "product");
+
+  return {
+    id: safeText(message.id ?? message._id) || createId("chat_msg"),
+    senderId: safeText(message.senderId ?? message.fromUserId ?? defaultSenderId),
+    text,
+    imageUrl,
+    createdAt,
+  };
+};
+
+const normalizeChatRecord = (chatInput = {}) => {
+  const chat = chatInput && typeof chatInput === "object" ? chatInput : {};
+  const createdAt = safeText(chat.createdAt) || nowIso();
+  const fallbackSenderId = safeText(chat.buyerId);
+  const messages = Array.isArray(chat.messages)
+    ? chat.messages.map((message, index) =>
+        normalizeChatMessageRecord(
+          message,
+          fallbackSenderId,
+          safeText(message?.createdAt) || new Date(toCreatedAtTime(createdAt) + index).toISOString(),
+        ),
+      )
+    : [];
+
+  const legacyMessageText = safeText(chat.message);
+  if (!messages.length && legacyMessageText) {
+    messages.push(
+      normalizeChatMessageRecord(
+        {
+          text: legacyMessageText,
+          createdAt,
+          senderId: fallbackSenderId,
+        },
+        fallbackSenderId,
+        createdAt,
+      ),
+    );
+  }
+
+  const sortedMessages = [...messages].sort(
+    (a, b) => toCreatedAtTime(a?.createdAt) - toCreatedAtTime(b?.createdAt),
+  );
+  const lastMessage = sortedMessages[sortedMessages.length - 1];
+  const updatedAt = safeText(chat.updatedAt) || lastMessage?.createdAt || createdAt;
+
+  return {
+    id: safeText(chat.id ?? chat._id) || createId("chat"),
+    productId: safeText(chat.productId),
+    ownerId: safeText(chat.ownerId),
+    buyerId: safeText(chat.buyerId),
+    createdAt,
+    updatedAt,
+    messages: sortedMessages,
+  };
+};
+
 const createSeedState = () => {
   const demoUserId = "user_demo";
   const ownerUserId = "user_owner";
   const now = Date.now();
+  const seededChatCreatedAt = new Date(now - 1000 * 60 * 70).toISOString();
+  const seededMessageBuyerAt = new Date(now - 1000 * 60 * 35).toISOString();
+  const seededMessageSellerAt = new Date(now - 1000 * 60 * 20).toISOString();
+  const seededMessageImageAt = new Date(now - 1000 * 60 * 10).toISOString();
 
   return {
     users: [
@@ -230,7 +295,39 @@ const createSeedState = () => {
       },
     ],
     orders: [],
-    chats: [],
+    chats: [
+      {
+        id: "chat_seed_01",
+        productId: "product_01",
+        ownerId: ownerUserId,
+        buyerId: demoUserId,
+        createdAt: seededChatCreatedAt,
+        updatedAt: seededMessageImageAt,
+        messages: [
+          {
+            id: "chat_msg_seed_1",
+            senderId: demoUserId,
+            text: "สวัสดีครับ สินค้าชิ้นนี้ยังอยู่ไหม",
+            imageUrl: "",
+            createdAt: seededMessageBuyerAt,
+          },
+          {
+            id: "chat_msg_seed_2",
+            senderId: ownerUserId,
+            text: "ยังอยู่ครับ พร้อมส่งวันนี้",
+            imageUrl: "",
+            createdAt: seededMessageSellerAt,
+          },
+          {
+            id: "chat_msg_seed_3",
+            senderId: demoUserId,
+            text: "",
+            imageUrl: `${DEFAULT_PRODUCT_IMAGE_URL}?seed=toycar-chat`,
+            createdAt: seededMessageImageAt,
+          },
+        ],
+      },
+    ],
   };
 };
 
@@ -265,7 +362,9 @@ export class MockDatabaseStore {
       products: Array.isArray(state.products) ? state.products : seed.products,
       carts: Array.isArray(state.carts) ? state.carts : seed.carts,
       orders: Array.isArray(state.orders) ? state.orders : seed.orders,
-      chats: Array.isArray(state.chats) ? state.chats : seed.chats,
+      chats: (Array.isArray(state.chats) ? state.chats : seed.chats).map((chat) =>
+        normalizeChatRecord(chat),
+      ),
     };
   }
 
@@ -418,6 +517,95 @@ export class MockDatabaseStore {
     const normalizedId = safeText(productId);
     if (!normalizedId) return null;
     return this.state.products.find((product) => product.id === normalizedId) ?? null;
+  }
+
+  #findChatById(chatId) {
+    const normalizedChatId = safeText(chatId);
+    if (!normalizedChatId) return null;
+    return this.state.chats.find((chat) => chat.id === normalizedChatId) ?? null;
+  }
+
+  #ensureChatMessages(chatRecord) {
+    if (!chatRecord || typeof chatRecord !== "object") return [];
+    if (!Array.isArray(chatRecord.messages)) chatRecord.messages = [];
+
+    chatRecord.messages = chatRecord.messages
+      .map((message, index) =>
+        normalizeChatMessageRecord(
+          message,
+          safeText(chatRecord.buyerId),
+          safeText(message?.createdAt) || new Date(Date.now() + index).toISOString(),
+        ),
+      )
+      .sort((a, b) => toCreatedAtTime(a?.createdAt) - toCreatedAtTime(b?.createdAt));
+
+    return chatRecord.messages;
+  }
+
+  #assertChatAccess(chatRecord, userId) {
+    if (!chatRecord) throw new Error("ไม่พบห้องแชท");
+    const normalizedUserId = safeText(userId);
+    const isOwner = normalizedUserId && safeText(chatRecord.ownerId) === normalizedUserId;
+    const isBuyer = normalizedUserId && safeText(chatRecord.buyerId) === normalizedUserId;
+    if (!isOwner && !isBuyer) throw new Error("คุณไม่มีสิทธิ์เข้าถึงห้องแชทนี้");
+  }
+
+  #getChatCounterpart(chatRecord, currentUserId) {
+    const normalizedCurrentUserId = safeText(currentUserId);
+    const owner = this.#findUserById(chatRecord?.ownerId);
+    const buyer = this.#findUserById(chatRecord?.buyerId);
+
+    if (normalizedCurrentUserId && safeText(chatRecord?.ownerId) === normalizedCurrentUserId) {
+      return buyer ?? owner;
+    }
+
+    return owner ?? buyer;
+  }
+
+  #toChatMessageResponse(chatRecord, messageRecord) {
+    if (!chatRecord || !messageRecord) return null;
+    const sender = this.#findUserById(messageRecord.senderId);
+    return {
+      id: messageRecord.id ?? "",
+      chatId: chatRecord.id ?? "",
+      senderId: messageRecord.senderId ?? "",
+      senderName: sender?.name ?? "ผู้ใช้",
+      senderAvatarUrl: sender?.avatarUrl ?? "",
+      text: messageRecord.text ?? "",
+      imageUrl: messageRecord.imageUrl ?? "",
+      createdAt: messageRecord.createdAt ?? "",
+    };
+  }
+
+  #toChatResponse(chatRecord, currentUserId) {
+    if (!chatRecord) return null;
+
+    const owner = this.#findUserById(chatRecord.ownerId);
+    const buyer = this.#findUserById(chatRecord.buyerId);
+    const counterpart = this.#getChatCounterpart(chatRecord, currentUserId);
+    const product = this.#findProductById(chatRecord.productId);
+    const messages = this.#ensureChatMessages(chatRecord);
+    const lastMessageRecord = messages[messages.length - 1] ?? null;
+    const lastMessage = this.#toChatMessageResponse(chatRecord, lastMessageRecord);
+
+    return {
+      id: chatRecord.id ?? "",
+      productId: chatRecord.productId ?? "",
+      productName: product?.name ?? "",
+      ownerId: chatRecord.ownerId ?? "",
+      buyerId: chatRecord.buyerId ?? "",
+      sellerId: chatRecord.ownerId ?? "",
+      sellerName: owner?.name ?? "ร้านค้า",
+      sellerAvatarUrl: owner?.avatarUrl ?? "",
+      counterpartId: counterpart?.id ?? "",
+      counterpartName: counterpart?.name ?? "ร้านค้า",
+      counterpartAvatarUrl: counterpart?.avatarUrl ?? "",
+      ownerName: owner?.name ?? "",
+      buyerName: buyer?.name ?? "",
+      createdAt: chatRecord.createdAt ?? "",
+      updatedAt: chatRecord.updatedAt ?? chatRecord.createdAt ?? "",
+      lastMessage,
+    };
   }
 
   #toCartItemResponse(cart, item) {
@@ -669,27 +857,132 @@ export class MockDatabaseStore {
     const productId = safeText(payload.productId);
     const product = this.#findProductById(productId);
     const ownerId = safeText(payload.ownerId) || product?.ownerId || "";
-    const message = safeText(payload.message) || "เริ่มแชท";
+    const initialMessageText = safeText(payload.message);
 
     if (!productId) throw new Error("ไม่พบรหัสสินค้า");
     if (!ownerId) throw new Error("ไม่พบเจ้าของสินค้า");
+    if (ownerId === requester.id) throw new Error("ไม่สามารถเริ่มแชทกับสินค้าของตัวเองได้");
 
-    const createdChat = {
-      id: createId("chat"),
-      productId,
-      ownerId,
-      buyerId: requester.id,
-      message,
-      createdAt: nowIso(),
-    };
+    let chat = this.state.chats.find(
+      (item) =>
+        safeText(item?.productId) === productId &&
+        safeText(item?.ownerId) === ownerId &&
+        safeText(item?.buyerId) === safeText(requester.id),
+    );
 
-    this.state.chats.push(createdChat);
+    if (!chat) {
+      chat = normalizeChatRecord({
+        id: createId("chat"),
+        productId,
+        ownerId,
+        buyerId: requester.id,
+        createdAt: nowIso(),
+        updatedAt: nowIso(),
+        messages: [],
+      });
+      this.state.chats.push(chat);
+    } else {
+      chat = normalizeChatRecord(chat);
+      const index = this.state.chats.findIndex((item) => item?.id === chat.id);
+      if (index >= 0) this.state.chats[index] = chat;
+    }
+
+    const messages = this.#ensureChatMessages(chat);
+    if (initialMessageText) {
+      const createdAt = nowIso();
+      const createdMessage = normalizeChatMessageRecord(
+        {
+          senderId: requester.id,
+          text: initialMessageText,
+          imageUrl: "",
+          createdAt,
+        },
+        requester.id,
+        createdAt,
+      );
+      messages.push(createdMessage);
+      messages.sort((a, b) => toCreatedAtTime(a?.createdAt) - toCreatedAtTime(b?.createdAt));
+      chat.updatedAt = createdMessage.createdAt;
+    } else if (!safeText(chat.updatedAt)) {
+      chat.updatedAt = chat.createdAt || nowIso();
+    }
+
     this.#persist();
 
     return {
-      chatId: createdChat.id,
-      chat: deepClone(createdChat),
+      chatId: chat.id,
+      chat: this.#toChatResponse(chat, requester.id),
       message: "สร้างห้องแชทแล้ว (mock)",
+    };
+  }
+
+  listMyChats() {
+    const currentUser = this.#requireCurrentUser();
+    if (!Array.isArray(this.state.chats)) this.state.chats = [];
+    this.state.chats = this.state.chats.map((chat) => normalizeChatRecord(chat));
+
+    const chats = this.state.chats
+      .filter((chat) => {
+        const isOwner = safeText(chat?.ownerId) === safeText(currentUser.id);
+        const isBuyer = safeText(chat?.buyerId) === safeText(currentUser.id);
+        return isOwner || isBuyer;
+      })
+      .map((chat) => this.#toChatResponse(chat, currentUser.id))
+      .filter(Boolean)
+      .sort(
+        (a, b) =>
+          toCreatedAtTime(b?.updatedAt ?? b?.createdAt) - toCreatedAtTime(a?.updatedAt ?? a?.createdAt),
+      );
+
+    return { chats };
+  }
+
+  listChatMessages(chatId) {
+    const currentUser = this.#requireCurrentUser();
+    const chat = this.#findChatById(chatId);
+    this.#assertChatAccess(chat, currentUser.id);
+    const messages = this.#ensureChatMessages(chat).map((message) =>
+      this.#toChatMessageResponse(chat, message),
+    );
+
+    return {
+      chat: this.#toChatResponse(chat, currentUser.id),
+      messages,
+    };
+  }
+
+  sendChatMessage(chatId, payloadInput = {}) {
+    const currentUser = this.#requireCurrentUser();
+    const payload = toPayloadObject(payloadInput);
+    const chat = this.#findChatById(chatId);
+    this.#assertChatAccess(chat, currentUser.id);
+
+    const text = safeText(payload.text ?? payload.message);
+    const imageUrl = normalizeImageUrl(payload.image ?? payload.imageUrl, "product");
+    if (!text && !imageUrl) throw new Error("กรุณากรอกข้อความหรือแนบรูปภาพ");
+
+    const createdAt = nowIso();
+    const createdMessage = normalizeChatMessageRecord(
+      {
+        senderId: currentUser.id,
+        text,
+        imageUrl,
+        createdAt,
+      },
+      currentUser.id,
+      createdAt,
+    );
+
+    const messages = this.#ensureChatMessages(chat);
+    messages.push(createdMessage);
+    messages.sort((a, b) => toCreatedAtTime(a?.createdAt) - toCreatedAtTime(b?.createdAt));
+    chat.updatedAt = createdMessage.createdAt;
+
+    this.#persist();
+
+    return {
+      chat: this.#toChatResponse(chat, currentUser.id),
+      message: this.#toChatMessageResponse(chat, createdMessage),
     };
   }
 

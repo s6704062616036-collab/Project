@@ -2,6 +2,7 @@ import React from "react";
 import { MyShopService } from "../services/MyShopService";
 import { ShopProduct } from "../models/ShopProduct";
 import { ProductCategory } from "../models/ProductCategory";
+import { ProfilePopup } from "../components/HeaderActionPopups";
 
 export class MyShopPage extends React.Component {
   state = {
@@ -11,6 +12,7 @@ export class MyShopPage extends React.Component {
     done: "",
     products: [],
     showCreatePopup: false,
+    showProfilePopup: false,
     draftProduct: ShopProduct.empty(),
     imageFiles: [],
     imagePreviewUrls: [],
@@ -75,6 +77,19 @@ export class MyShopPage extends React.Component {
       imagePreviewUrls: [],
       error: "",
     });
+  };
+
+  openProfilePopup = () => {
+    this.setState({ showProfilePopup: true });
+  };
+
+  closeProfilePopup = () => {
+    this.setState({ showProfilePopup: false });
+  };
+
+  goMyShop = () => {
+    this.setState({ showProfilePopup: false });
+    this.props.onGoMyShop?.();
   };
 
   setDraftField = (key, value) => {
@@ -181,6 +196,7 @@ export class MyShopPage extends React.Component {
       done,
       products,
       showCreatePopup,
+      showProfilePopup,
       draftProduct,
       imageFiles,
       imagePreviewUrls,
@@ -200,7 +216,7 @@ export class MyShopPage extends React.Component {
                 <img
                   src="/App logo.jpg"
                   alt="App logo"
-                  className="h-12 w-12 rounded-xl object-cover"
+                  className="h-20 w-20 rounded-xl object-cover"
                 />
               </button>
               <div className="font-semibold">สินค้าที่ลงขาย</div>
@@ -215,6 +231,24 @@ export class MyShopPage extends React.Component {
                   + เพิ่มสินค้า
                 </button>
               ) : null}
+
+              <button
+                type="button"
+                className="h-10 w-10 rounded-xl bg-[#F4D03E] border border-zinc-200 grid place-items-center"
+                onClick={() => this.props.onGoChat?.()}
+                title="แชท"
+              >
+                💬
+              </button>
+
+              <button
+                type="button"
+                className="h-10 w-10 rounded-xl bg-[#F4D03E] text-white grid place-items-center"
+                onClick={this.openProfilePopup}
+                title="บัญชี"
+              >
+                👤
+              </button>
             </div>
           </div>
         </div>
@@ -256,6 +290,15 @@ export class MyShopPage extends React.Component {
             onChangeField={this.setDraftField}
             onChangeImageFiles={this.setImageFiles}
             onSubmit={this.submitProduct}
+          />
+        ) : null}
+
+        {showProfilePopup ? (
+          <ProfilePopup
+            user={user}
+            onClose={this.closeProfilePopup}
+            onGoMyShop={this.goMyShop}
+            onLogout={this.props.onLogout}
           />
         ) : null}
       </div>

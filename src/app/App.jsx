@@ -5,21 +5,22 @@ import { HomePage } from "../pages/HomePage";
 import { MyShopPage } from "../pages/MyShopPage";
 import { ProductDetailPage } from "../pages/ProductDetailPage";
 import { SearchProductsPage } from "../pages/SearchProductsPage";
+import { ChatPage } from "../pages/ChatPage";
 import { AuthService } from "../services/AuthService";
 import { DataModeSwitchWidget } from "./DataModeSwitchWidget";
 
 export default class App extends React.Component {
-  // Dev mode (เข้า home ได้เลยเพื่อดู UI)
   state = {
-    route: import.meta.env.DEV ? "home" : "login",
-    user: import.meta.env.DEV ? { name: "Preview User" } : null,
+    route: "login",
+    user: null,
     selectedProduct: null,
     searchKeyword: "",
+    selectedChatId: "",
     booting: true,
   };
 
   auth = AuthService.instance();
-  appRoutes = new Set(["login", "register", "home", "myshop", "product", "search"]);
+  appRoutes = new Set(["login", "register", "home", "myshop", "product", "search", "chat"]);
 
   async componentDidMount() {
     if (typeof window !== "undefined") {
@@ -66,6 +67,7 @@ export default class App extends React.Component {
       route,
       selectedProduct: historyState?.selectedProduct ?? null,
       searchKeyword: historyState?.searchKeyword ?? "",
+      selectedChatId: historyState?.selectedChatId ?? "",
     });
   };
 
@@ -77,6 +79,7 @@ export default class App extends React.Component {
       route: this.state.route,
       selectedProduct: this.state.selectedProduct ? { ...this.state.selectedProduct } : null,
       searchKeyword: this.state.searchKeyword ?? "",
+      selectedChatId: this.state.selectedChatId ?? "",
     };
 
     try {
@@ -87,6 +90,7 @@ export default class App extends React.Component {
           route: safePayload.route,
           selectedProduct: null,
           searchKeyword: safePayload.searchKeyword,
+          selectedChatId: safePayload.selectedChatId,
         },
         "",
         window.location.href,
@@ -99,6 +103,7 @@ export default class App extends React.Component {
 
     const hasSelectedProduct = Object.prototype.hasOwnProperty.call(patch, "selectedProduct");
     const hasSearchKeyword = Object.prototype.hasOwnProperty.call(patch, "searchKeyword");
+    const hasSelectedChatId = Object.prototype.hasOwnProperty.call(patch, "selectedChatId");
 
     this.setState(
       {
@@ -106,6 +111,7 @@ export default class App extends React.Component {
         route,
         selectedProduct: hasSelectedProduct ? patch.selectedProduct : this.state.selectedProduct,
         searchKeyword: hasSearchKeyword ? patch.searchKeyword : this.state.searchKeyword,
+        selectedChatId: hasSelectedChatId ? patch.selectedChatId : this.state.selectedChatId,
       },
       () => {
         this.syncHistoryEntry({ replace });
@@ -122,10 +128,18 @@ export default class App extends React.Component {
   // ✅ HomePage เรียกกลับมาเมื่อแก้โปรไฟล์สำเร็จ
   onUpdatedUser = (user) => this.setState({ user });
   onGoMyShop = () => this.navigate("myshop");
-  onBackHome = () => this.navigate("home", { patch: { selectedProduct: null } });
-  onOpenProduct = (product) => this.navigate("product", { patch: { selectedProduct: product ?? null } });
+  onBackHome = () => this.navigate("home", { patch: { selectedProduct: null, selectedChatId: "" } });
+  onOpenProduct = (product) =>
+    this.navigate("product", { patch: { selectedProduct: product ?? null, selectedChatId: "" } });
   onOpenSearch = (keyword) =>
-    this.navigate("search", { patch: { searchKeyword: keyword ?? "", selectedProduct: null } });
+    this.navigate("search", {
+      patch: { searchKeyword: keyword ?? "", selectedProduct: null, selectedChatId: "" },
+    });
+  onGoChat = ({ chatId } = {}) => {
+    const normalizedChatId = `${chatId ?? ""}`.trim();
+    const patch = normalizedChatId ? { selectedChatId: normalizedChatId, selectedProduct: null } : { selectedProduct: null };
+    this.navigate("chat", { patch });
+  };
 
   onLogout = async () => {
     try {
@@ -136,23 +150,24 @@ export default class App extends React.Component {
           user: null,
           selectedProduct: null,
           searchKeyword: "",
+          selectedChatId: "",
         },
       });
     }
   };
 
-  // DB_SWITCH: render ตัวสวิตช์แบบ overlay โดยไม่กระทบ layout เดิมของแต่ละหน้า
   renderWithDataModeSwitch(content) {
     return (
       <>
         {content}
+        {/* DATA_MODE_SWITCH: ลบ widget นี้ได้ทันที หากไม่ต้องการโหมด no-db */}
         <DataModeSwitchWidget />
       </>
     );
   }
 
   render() {
-    const { route, user, selectedProduct, searchKeyword, booting } = this.state;
+    const { route, user, selectedProduct, searchKeyword, selectedChatId, booting } = this.state;
     if (booting) return null;
 
     // guard (ป้องกันผู้ใช้ที่ยังไม่ login เข้าหน้าในระบบผ่าน browser back)
@@ -184,7 +199,15 @@ export default class App extends React.Component {
     }
 
     if (route === "myshop") {
-      return this.renderWithDataModeSwitch(<MyShopPage user={user} onBack={this.onBackHome} />);
+      return this.renderWithDataModeSwitch(
+        <MyShopPage
+          user={user}
+          onBack={this.onBackHome}
+          onGoMyShop={this.onGoMyShop}
+          onGoChat={this.onGoChat}
+          onLogout={this.onLogout}
+        />
+      );
     }
 
     if (route === "product") {
@@ -197,6 +220,7 @@ export default class App extends React.Component {
           onOpenProduct={this.onOpenProduct}
           onGoMyShop={this.onGoMyShop}
           onLogout={this.onLogout}
+          onGoChat={this.onGoChat}
         />
       );
     }
@@ -211,6 +235,18 @@ export default class App extends React.Component {
           onOpenProduct={this.onOpenProduct}
           onGoMyShop={this.onGoMyShop}
           onLogout={this.onLogout}
+          onGoChat={this.onGoChat}
+        />
+      );
+    }
+
+    if (route === "chat") {
+      return this.renderWithDataModeSwitch(
+        <ChatPage
+          user={user}
+          initialChatId={selectedChatId}
+          onGoHome={this.onBackHome}
+          onOpenProduct={this.onOpenProduct}
         />
       );
     }
@@ -228,6 +264,7 @@ export default class App extends React.Component {
         onGoHome={this.onBackHome}
         onOpenProduct={this.onOpenProduct}
         onSubmitSearch={this.onOpenSearch}
+        onGoChat={this.onGoChat}
       />
     );
   }

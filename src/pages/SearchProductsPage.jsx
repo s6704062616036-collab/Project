@@ -231,6 +231,14 @@ export class SearchProductsPage extends React.Component {
             </button>
 
             <button
+              className="h-10 w-10 rounded-xl bg-[#F4D03E] border border-zinc-200 grid place-items-center"
+              onClick={() => this.props.onGoChat?.()}
+              title="แชท"
+            >
+              💬
+            </button>
+
+            <button
               className="h-10 w-10 rounded-xl bg-[#F4D03E] text-white grid place-items-center"
               onClick={this.openProfilePopup}
               title="บัญชี"
