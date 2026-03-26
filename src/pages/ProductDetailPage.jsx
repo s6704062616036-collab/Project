@@ -3,6 +3,7 @@ import { ShopProduct } from "../models/ShopProduct";
 import { ProductCategory } from "../models/ProductCategory";
 import { MyShopService } from "../services/MyShopService";
 import { CartService } from "../services/CartService";
+import { CartPopup, ProfilePopup } from "../components/HeaderActionPopups";
 
 export class ProductDetailPage extends React.Component {
   state = {
@@ -14,6 +15,13 @@ export class ProductDetailPage extends React.Component {
     openingChat: false,
     actionError: "",
     actionDone: "",
+    showProfilePopup: false,
+    showCartPopup: false,
+    cartLoading: false,
+    cartError: "",
+    cartDone: "",
+    cartItems: [],
+    checkingOut: false,
   };
 
   myShopService = MyShopService.instance();
@@ -150,6 +158,96 @@ export class ProductDetailPage extends React.Component {
     }
   };
 
+  openProfilePopup = () => {
+    this.setState({
+      showProfilePopup: true,
+      showCartPopup: false,
+    });
+  };
+
+  closeProfilePopup = () => {
+    this.setState({ showProfilePopup: false });
+  };
+
+  goMyShop = () => {
+    this.setState({ showProfilePopup: false });
+    this.props.onGoMyShop?.();
+  };
+
+  openCartPopup = async () => {
+    this.setState({
+      showCartPopup: true,
+      showProfilePopup: false,
+      cartError: "",
+      cartDone: "",
+    });
+    await this.loadCartItems();
+  };
+
+  closeCartPopup = () => {
+    this.setState({ showCartPopup: false, cartError: "", cartDone: "" });
+  };
+
+  loadCartItems = async () => {
+    this.setState({ cartLoading: true, cartError: "" });
+    try {
+      const { items } = await this.cartService.listMyCart();
+      this.setState({ cartItems: items ?? [] });
+    } catch (e) {
+      this.setState({ cartError: e?.message ?? "โหลดตะกร้าสินค้าไม่สำเร็จ" });
+    } finally {
+      this.setState({ cartLoading: false });
+    }
+  };
+
+  removeCartItem = async (item) => {
+    try {
+      await this.cartService.removeItem({
+        itemId: item?.id,
+        productId: item?.productId,
+      });
+      await this.loadCartItems();
+      this.setState({ cartDone: "ลบสินค้าออกจากตะกร้าแล้ว" });
+    } catch (e) {
+      this.setState({ cartError: e?.message ?? "ลบสินค้าออกจากตะกร้าไม่สำเร็จ" });
+    }
+  };
+
+  openCartItem = (item) => {
+    this.setState({ showCartPopup: false });
+    this.props.onOpenProduct?.(item?.toProductPayload?.() ?? null);
+  };
+
+  checkoutCart = async () => {
+    if (!this.state.cartItems.length) return;
+
+    this.setState({ checkingOut: true, cartError: "", cartDone: "" });
+    try {
+      const result = await this.cartService.checkout();
+      await this.loadCartItems();
+      this.setState({
+        cartDone: result?.message ?? "สั่งซื้อเรียบร้อย",
+      });
+    } catch (e) {
+      this.setState({ cartError: e?.message ?? "สั่งซื้อไม่สำเร็จ" });
+    } finally {
+      this.setState({ checkingOut: false });
+    }
+  };
+
+  getCartTotalLabel() {
+    const total = (this.state.cartItems ?? []).reduce(
+      (sum, item) => sum + (item?.getLineTotalNumber?.() ?? 0),
+      0,
+    );
+
+    return new Intl.NumberFormat("th-TH", {
+      style: "currency",
+      currency: "THB",
+      maximumFractionDigits: 2,
+    }).format(total);
+  }
+
   render() {
     const {
       loadingProduct,
@@ -159,11 +257,19 @@ export class ProductDetailPage extends React.Component {
       openingChat,
       actionError,
       actionDone,
+      showProfilePopup,
+      showCartPopup,
+      cartLoading,
+      cartError,
+      cartDone,
+      cartItems,
+      checkingOut,
     } = this.state;
     const product = this.getResolvedProduct();
     const imageUrls = product.getImageUrls();
     const primaryImage = imageUrls[0] ?? "";
     const hasProductData = Boolean(product?.id || product?.name);
+    const cartTotalLabel = this.getCartTotalLabel();
 
     return (
       <div className="min-h-dvh bg-zinc-50">
@@ -192,7 +298,7 @@ export class ProductDetailPage extends React.Component {
 
             <button
               className="h-10 w-10 rounded-xl bg-[#F4D03E] border border-zinc-200 grid place-items-center"
-              onClick={this.props.onCart}
+              onClick={this.openCartPopup}
               title="ตะกร้า"
             >
               🛒
@@ -200,7 +306,7 @@ export class ProductDetailPage extends React.Component {
 
             <button
               className="h-10 w-10 rounded-xl bg-[#F4D03E] text-white grid place-items-center"
-              onClick={this.props.onToggleMenu}
+              onClick={this.openProfilePopup}
               title="บัญชี"
             >
               👤
@@ -295,6 +401,30 @@ export class ProductDetailPage extends React.Component {
             )}
           </div>
         </div>
+
+        {showCartPopup ? (
+          <CartPopup
+            items={cartItems}
+            loading={cartLoading}
+            error={cartError}
+            done={cartDone}
+            checkingOut={checkingOut}
+            totalLabel={cartTotalLabel}
+            onClose={this.closeCartPopup}
+            onOpenItem={this.openCartItem}
+            onRemoveItem={this.removeCartItem}
+            onCheckout={this.checkoutCart}
+          />
+        ) : null}
+
+        {showProfilePopup ? (
+          <ProfilePopup
+            user={this.props.user}
+            onClose={this.closeProfilePopup}
+            onGoMyShop={this.goMyShop}
+            onLogout={this.props.onLogout}
+          />
+        ) : null}
       </div>
     );
   }

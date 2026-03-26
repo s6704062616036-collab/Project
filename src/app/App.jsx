@@ -6,6 +6,7 @@ import { MyShopPage } from "../pages/MyShopPage";
 import { ProductDetailPage } from "../pages/ProductDetailPage";
 import { SearchProductsPage } from "../pages/SearchProductsPage";
 import { AuthService } from "../services/AuthService";
+import { DataModeSwitchWidget } from "./DataModeSwitchWidget";
 
 export default class App extends React.Component {
   // Dev mode (เข้า home ได้เลยเพื่อดู UI)
@@ -140,13 +141,23 @@ export default class App extends React.Component {
     }
   };
 
+  // DB_SWITCH: render ตัวสวิตช์แบบ overlay โดยไม่กระทบ layout เดิมของแต่ละหน้า
+  renderWithDataModeSwitch(content) {
+    return (
+      <>
+        {content}
+        <DataModeSwitchWidget />
+      </>
+    );
+  }
+
   render() {
     const { route, user, selectedProduct, searchKeyword, booting } = this.state;
     if (booting) return null;
 
     // guard (ป้องกันผู้ใช้ที่ยังไม่ login เข้าหน้าในระบบผ่าน browser back)
     if (!user && !["login", "register"].includes(route)) {
-      return (
+      return this.renderWithDataModeSwitch(
         <LoginPage
           onGoRegister={() => this.go("register")}
           onLoggedIn={this.onLoggedIn}
@@ -155,7 +166,7 @@ export default class App extends React.Component {
     }
 
     if (route === "login") {
-      return (
+      return this.renderWithDataModeSwitch(
         <LoginPage
           onGoRegister={() => this.go("register")}
           onLoggedIn={this.onLoggedIn}
@@ -164,7 +175,7 @@ export default class App extends React.Component {
     }
 
     if (route === "register") {
-      return (
+      return this.renderWithDataModeSwitch(
         <RegisterPage
           onGoLogin={() => this.go("login")}
           onRegistered={this.onRegistered}
@@ -173,33 +184,38 @@ export default class App extends React.Component {
     }
 
     if (route === "myshop") {
-      return <MyShopPage user={user} onBack={this.onBackHome} />;
+      return this.renderWithDataModeSwitch(<MyShopPage user={user} onBack={this.onBackHome} />);
     }
 
     if (route === "product") {
-      return (
+      return this.renderWithDataModeSwitch(
         <ProductDetailPage
           product={selectedProduct}
+          user={user}
           onGoHome={this.onBackHome}
           onSubmitSearch={this.onOpenSearch}
-          onCart={() => console.log("cart")}
-          onToggleMenu={() => console.log("menu")}
+          onOpenProduct={this.onOpenProduct}
+          onGoMyShop={this.onGoMyShop}
+          onLogout={this.onLogout}
         />
       );
     }
 
     if (route === "search") {
-      return (
+      return this.renderWithDataModeSwitch(
         <SearchProductsPage
           initialKeyword={searchKeyword}
+          user={user}
           onBack={this.onBackHome}
           onGoHome={this.onBackHome}
           onOpenProduct={this.onOpenProduct}
+          onGoMyShop={this.onGoMyShop}
+          onLogout={this.onLogout}
         />
       );
     }
 
-    return (
+    return this.renderWithDataModeSwitch(
       <HomePage
         user={user}
         onLogout={this.onLogout}

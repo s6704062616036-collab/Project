@@ -1,10 +1,20 @@
+import { DataModeSwitch } from "./dataMode/DataModeSwitch";
+import { MockApiRouter } from "./dataMode/MockApiRouter";
+
 export class HttpClient {
   constructor({ baseUrl = import.meta.env.VITE_API_URL ?? "" } = {}) {
     this.baseUrl = baseUrl;
     this.jsonHeaders = { "Content-Type": "application/json" };
+    // DB_SWITCH: mock router สำหรับทดสอบโดยไม่ใช้ database จริง
+    this.mockRouter = MockApiRouter.instance();
   }
 
   async request(path, { method = "GET", body, headers } = {}) {
+    // DB_SWITCH: เมื่ออยู่โหมด mock ให้ตัดไปใช้ mock backend ทั้งระบบ
+    if (DataModeSwitch.isMockMode()) {
+      return this.mockRouter.request(path, { method, body, headers });
+    }
+
     const isFormData =
       typeof FormData !== "undefined" && body instanceof FormData;
 

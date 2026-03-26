@@ -1,6 +1,8 @@
 import React from "react";
 import { MyShopService } from "../services/MyShopService";
 import { ProductCategory } from "../models/ProductCategory";
+import { CartService } from "../services/CartService";
+import { CartPopup, ProfilePopup } from "../components/HeaderActionPopups";
 
 export class SearchProductsPage extends React.Component {
   state = {
@@ -8,9 +10,17 @@ export class SearchProductsPage extends React.Component {
     loading: true,
     error: "",
     products: [],
+    showProfilePopup: false,
+    showCartPopup: false,
+    cartLoading: false,
+    cartError: "",
+    cartDone: "",
+    cartItems: [],
+    checkingOut: false,
   };
 
   myShopService = MyShopService.instance();
+  cartService = CartService.instance();
 
   async componentDidMount() {
     await this.searchProducts(this.state.keyword);
@@ -34,6 +44,96 @@ export class SearchProductsPage extends React.Component {
     e.preventDefault();
     await this.searchProducts(this.state.keyword);
   };
+
+  openProfilePopup = () => {
+    this.setState({
+      showProfilePopup: true,
+      showCartPopup: false,
+    });
+  };
+
+  closeProfilePopup = () => {
+    this.setState({ showProfilePopup: false });
+  };
+
+  goMyShop = () => {
+    this.setState({ showProfilePopup: false });
+    this.props.onGoMyShop?.();
+  };
+
+  openCartPopup = async () => {
+    this.setState({
+      showCartPopup: true,
+      showProfilePopup: false,
+      cartError: "",
+      cartDone: "",
+    });
+    await this.loadCartItems();
+  };
+
+  closeCartPopup = () => {
+    this.setState({ showCartPopup: false, cartError: "", cartDone: "" });
+  };
+
+  loadCartItems = async () => {
+    this.setState({ cartLoading: true, cartError: "" });
+    try {
+      const { items } = await this.cartService.listMyCart();
+      this.setState({ cartItems: items ?? [] });
+    } catch (e) {
+      this.setState({ cartError: e?.message ?? "โหลดตะกร้าสินค้าไม่สำเร็จ" });
+    } finally {
+      this.setState({ cartLoading: false });
+    }
+  };
+
+  removeCartItem = async (item) => {
+    try {
+      await this.cartService.removeItem({
+        itemId: item?.id,
+        productId: item?.productId,
+      });
+      await this.loadCartItems();
+      this.setState({ cartDone: "ลบสินค้าออกจากตะกร้าแล้ว" });
+    } catch (e) {
+      this.setState({ cartError: e?.message ?? "ลบสินค้าออกจากตะกร้าไม่สำเร็จ" });
+    }
+  };
+
+  openCartItem = (item) => {
+    this.setState({ showCartPopup: false });
+    this.props.onOpenProduct?.(item?.toProductPayload?.() ?? null);
+  };
+
+  checkoutCart = async () => {
+    if (!this.state.cartItems.length) return;
+
+    this.setState({ checkingOut: true, cartError: "", cartDone: "" });
+    try {
+      const result = await this.cartService.checkout();
+      await this.loadCartItems();
+      this.setState({
+        cartDone: result?.message ?? "สั่งซื้อเรียบร้อย",
+      });
+    } catch (e) {
+      this.setState({ cartError: e?.message ?? "สั่งซื้อไม่สำเร็จ" });
+    } finally {
+      this.setState({ checkingOut: false });
+    }
+  };
+
+  getCartTotalLabel() {
+    const total = (this.state.cartItems ?? []).reduce(
+      (sum, item) => sum + (item?.getLineTotalNumber?.() ?? 0),
+      0,
+    );
+
+    return new Intl.NumberFormat("th-TH", {
+      style: "currency",
+      currency: "THB",
+      maximumFractionDigits: 2,
+    }).format(total);
+  }
 
   getNameSimilarityScore(name, keyword) {
     const source = (name ?? "").toLowerCase().trim();
@@ -80,8 +180,21 @@ export class SearchProductsPage extends React.Component {
   };
 
   render() {
-    const { keyword, loading, error, products } = this.state;
+    const {
+      keyword,
+      loading,
+      error,
+      products,
+      showProfilePopup,
+      showCartPopup,
+      cartLoading,
+      cartError,
+      cartDone,
+      cartItems,
+      checkingOut,
+    } = this.state;
     const labelKeyword = keyword.trim() ? keyword.trim() : "ทั้งหมด";
+    const cartTotalLabel = this.getCartTotalLabel();
 
     return (
       <div className="min-h-dvh bg-zinc-50">
@@ -108,6 +221,22 @@ export class SearchProductsPage extends React.Component {
                 onChange={(e) => this.onKeywordChange(e.target.value)}
               />
             </form>
+
+            <button
+              className="h-10 w-10 rounded-xl bg-[#F4D03E] border border-zinc-200 grid place-items-center"
+              onClick={this.openCartPopup}
+              title="ตะกร้า"
+            >
+              🛒
+            </button>
+
+            <button
+              className="h-10 w-10 rounded-xl bg-[#F4D03E] text-white grid place-items-center"
+              onClick={this.openProfilePopup}
+              title="บัญชี"
+            >
+              👤
+            </button>
           </div>
         </div>
 
@@ -143,6 +272,30 @@ export class SearchProductsPage extends React.Component {
             ) : null}
           </div>
         </div>
+
+        {showCartPopup ? (
+          <CartPopup
+            items={cartItems}
+            loading={cartLoading}
+            error={cartError}
+            done={cartDone}
+            checkingOut={checkingOut}
+            totalLabel={cartTotalLabel}
+            onClose={this.closeCartPopup}
+            onOpenItem={this.openCartItem}
+            onRemoveItem={this.removeCartItem}
+            onCheckout={this.checkoutCart}
+          />
+        ) : null}
+
+        {showProfilePopup ? (
+          <ProfilePopup
+            user={this.props.user}
+            onClose={this.closeProfilePopup}
+            onGoMyShop={this.goMyShop}
+            onLogout={this.props.onLogout}
+          />
+        ) : null}
       </div>
     );
   }

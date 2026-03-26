@@ -14,3 +14,24 @@ The React Compiler is not enabled on this template because of its impact on dev 
 ## Expanding the ESLint configuration
 
 If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+
+## DB / Mock Switch (No-DB Testing)
+
+This project includes a `DB_SWITCH` layer for testing without a real database.
+
+- Runtime toggle: click the floating switch at bottom-right (`DB` / `MOCK`).
+- Default mode by env: set `VITE_DATA_MODE=api` or `VITE_DATA_MODE=mock`.
+- Hide switch by env: set `VITE_HIDE_DATA_MODE_SWITCH=true`.
+- Demo mock account: `demo@myweb.local` / `123456`.
+
+### DB_SWITCH files (easy to find/remove)
+
+- `src/services/dataMode/DataModeSwitch.jsx`
+- `src/services/dataMode/MockDatabaseStore.jsx`
+- `src/services/dataMode/MockApiRouter.jsx`
+- `src/app/DataModeSwitchWidget.jsx`
+Integration points:
+- `src/services/HttpClient.jsx`
+- `src/app/App.jsx`
+
+Search keyword: `DB_SWITCH`
