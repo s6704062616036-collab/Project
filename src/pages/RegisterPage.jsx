@@ -124,9 +124,6 @@ export class RegisterPage extends React.Component {
         <form className="w-full max-w-sm rounded-2xl bg-white p-6 shadow space-y-4" onSubmit={this.onSubmit}>
           <div className="text-center space-y-2">
             <h1 className="text-xl font-semibold">ลงทะเบียน</h1>
-            <p className="text-sm text-zinc-500">
-              กรอกข้อมูลพื้นฐานเพื่อสร้างบัญชี ระบบจะส่งข้อมูลชุดนี้ไปบันทึกในฐานข้อมูลผ่าน service/backend
-            </p>
           </div>
 
           {error && (

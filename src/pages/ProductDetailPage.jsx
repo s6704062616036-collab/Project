@@ -11,6 +11,8 @@ export class ProductDetailPage extends React.Component {
     loadingProduct: false,
     productError: "",
     productFromDatabase: null,
+    activeImageIndex: 0,
+    isDraggingGallery: false,
     searchKeyword: "",
     addingToCart: false,
     openingChat: false,
@@ -28,6 +30,13 @@ export class ProductDetailPage extends React.Component {
   myShopService = MyShopService.instance();
   cartService = CartService.instance();
   chatService = ChatService.instance();
+  galleryViewportRef = React.createRef();
+  galleryPointerState = {
+    pointerId: null,
+    startX: 0,
+    startScrollLeft: 0,
+    didDrag: false,
+  };
 
   componentDidMount() {
     this.syncProductFromDatabase();
@@ -38,7 +47,14 @@ export class ProductDetailPage extends React.Component {
     const nextProductId = this.getProductId(this.props.product);
 
     if (prevProductId !== nextProductId) {
+      this.resetGallery();
       this.syncProductFromDatabase();
+      return;
+    }
+
+    const imageCount = this.getResolvedProduct()?.getImageUrls?.().length ?? 0;
+    if (imageCount > 0 && this.state.activeImageIndex > imageCount - 1) {
+      this.setState({ activeImageIndex: imageCount - 1 });
     }
   }
 
@@ -58,6 +74,117 @@ export class ProductDetailPage extends React.Component {
   getResolvedProduct() {
     return this.state.productFromDatabase ?? this.toProduct();
   }
+
+  resetGallery = () => {
+    this.galleryPointerState = {
+      pointerId: null,
+      startX: 0,
+      startScrollLeft: 0,
+      didDrag: false,
+    };
+
+    this.setState({ activeImageIndex: 0, isDraggingGallery: false }, () => {
+      if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
+        window.requestAnimationFrame(() => this.scrollGalleryToIndex(0, "auto"));
+        return;
+      }
+      this.scrollGalleryToIndex(0, "auto");
+    });
+  };
+
+  scrollGalleryToIndex = (index, behavior = "smooth") => {
+    const viewport = this.galleryViewportRef.current;
+    if (!viewport) return;
+
+    const safeIndex = Math.max(0, index);
+    viewport.scrollTo({
+      left: viewport.clientWidth * safeIndex,
+      behavior,
+    });
+  };
+
+  selectGalleryImage = (index) => {
+    this.setState({ activeImageIndex: index }, () => {
+      this.scrollGalleryToIndex(index, "smooth");
+    });
+  };
+
+  onGalleryScroll = (e) => {
+    const viewport = e.currentTarget;
+    if (!viewport?.clientWidth) return;
+
+    const nextIndex = Math.max(0, Math.round(viewport.scrollLeft / viewport.clientWidth));
+    if (nextIndex !== this.state.activeImageIndex) {
+      this.setState({ activeImageIndex: nextIndex });
+    }
+  };
+
+  onGalleryPointerDown = (e) => {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+
+    const viewport = this.galleryViewportRef.current;
+    if (!viewport) return;
+
+    this.galleryPointerState = {
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startScrollLeft: viewport.scrollLeft,
+      didDrag: false,
+    };
+
+    try {
+      viewport.setPointerCapture?.(e.pointerId);
+    } catch {
+      // ignore unsupported pointer capture
+    }
+
+    this.setState({ isDraggingGallery: true });
+  };
+
+  onGalleryPointerMove = (e) => {
+    const viewport = this.galleryViewportRef.current;
+    if (!viewport || this.galleryPointerState.pointerId !== e.pointerId) return;
+
+    const deltaX = e.clientX - this.galleryPointerState.startX;
+    if (Math.abs(deltaX) > 4) {
+      this.galleryPointerState.didDrag = true;
+      e.preventDefault();
+    }
+
+    viewport.scrollLeft = this.galleryPointerState.startScrollLeft - deltaX;
+  };
+
+  finishGalleryPointerDrag = (e) => {
+    const activePointerId = this.galleryPointerState.pointerId;
+    if (activePointerId == null) return;
+    if (typeof e?.pointerId === "number" && e.pointerId !== activePointerId) return;
+
+    const viewport = this.galleryViewportRef.current;
+
+    if (viewport) {
+      try {
+        viewport.releasePointerCapture?.(activePointerId);
+      } catch {
+        // ignore unsupported pointer capture
+      }
+    }
+
+    const nextIndex =
+      viewport?.clientWidth
+        ? Math.max(0, Math.round(viewport.scrollLeft / viewport.clientWidth))
+        : 0;
+
+    this.galleryPointerState = {
+      pointerId: null,
+      startX: 0,
+      startScrollLeft: 0,
+      didDrag: false,
+    };
+
+    this.setState({ activeImageIndex: nextIndex, isDraggingGallery: false }, () => {
+      this.scrollGalleryToIndex(nextIndex, "smooth");
+    });
+  };
 
   syncProductFromDatabase = async () => {
     const fallbackProduct = this.toProduct();
@@ -103,6 +230,10 @@ export class ProductDetailPage extends React.Component {
     const product = this.getResolvedProduct();
     if (!product?.id) {
       this.setState({ actionError: "ไม่พบรหัสสินค้า จึงยังเพิ่มลงตะกร้าไม่ได้", actionDone: "" });
+      return;
+    }
+    if (product?.isSold?.()) {
+      this.setState({ actionError: "สินค้านี้ขายออกแล้ว", actionDone: "" });
       return;
     }
 
@@ -278,12 +409,18 @@ export class ProductDetailPage extends React.Component {
       cartDone,
       cartItems,
       checkingOut,
+      activeImageIndex,
+      isDraggingGallery,
     } = this.state;
     const product = this.getResolvedProduct();
     const imageUrls = product.getImageUrls();
-    const primaryImage = imageUrls[0] ?? "";
+    const safeActiveImageIndex =
+      imageUrls.length > 0 ? Math.min(activeImageIndex, imageUrls.length - 1) : 0;
+    const hasMultipleImages = imageUrls.length > 1;
+    const exchangeItem = `${product?.exchangeItem ?? ""}`.trim();
     const hasProductData = Boolean(product?.id || product?.name);
     const cartTotalLabel = this.getCartTotalLabel();
+    const isSold = product?.isSold?.() ?? false;
 
     return (
       <div className="min-h-dvh bg-zinc-50">
@@ -362,26 +499,72 @@ export class ProductDetailPage extends React.Component {
             ) : (
               <div className="grid grid-cols-1 gap-6 md:grid-cols-[22rem_minmax(0,1fr)]">
                 <div className="space-y-3">
-                  <div className="aspect-square rounded-2xl bg-zinc-100 overflow-hidden grid place-items-center">
-                    {primaryImage ? (
-                      <img
-                        src={primaryImage}
-                        alt={product?.name ?? "product-image"}
-                        className="h-full w-full object-cover"
-                      />
+                  <div
+                    ref={this.galleryViewportRef}
+                    className={`flex aspect-square overflow-x-auto hide-scrollbar rounded-2xl bg-zinc-100 snap-x snap-mandatory select-none ${
+                      hasMultipleImages
+                        ? isDraggingGallery
+                          ? "cursor-grabbing"
+                          : "cursor-grab"
+                        : ""
+                    }`}
+                    onScroll={hasMultipleImages ? this.onGalleryScroll : undefined}
+                    onPointerDown={hasMultipleImages ? this.onGalleryPointerDown : undefined}
+                    onPointerMove={hasMultipleImages ? this.onGalleryPointerMove : undefined}
+                    onPointerUp={hasMultipleImages ? this.finishGalleryPointerDrag : undefined}
+                    onPointerCancel={hasMultipleImages ? this.finishGalleryPointerDrag : undefined}
+                    style={{ touchAction: hasMultipleImages ? "pan-y" : "auto" }}
+                  >
+                    {imageUrls.length ? (
+                      imageUrls.map((url, index) => (
+                        <div
+                          key={`${product.id || product.name}-image-${index}`}
+                          className="grid h-full w-full shrink-0 snap-center place-items-center overflow-hidden"
+                        >
+                          <img
+                            src={url}
+                            alt={`${product?.name ?? "product-image"}-${index + 1}`}
+                            className="pointer-events-none h-full w-full object-cover"
+                            draggable={false}
+                          />
+                        </div>
+                      ))
                     ) : (
-                      <span className="text-sm text-zinc-400">ไม่มีรูปภาพ</span>
+                      <div className="grid h-full w-full shrink-0 place-items-center">
+                        <span className="text-sm text-zinc-400">ไม่มีรูปภาพ</span>
+                      </div>
                     )}
                   </div>
-                  {imageUrls.length > 1 ? (
-                    <div className="grid grid-cols-4 gap-2">
+                  {hasMultipleImages ? (
+                    <div className="flex items-center justify-between gap-2 text-xs text-zinc-500">
+                      <div>ลากเพื่อเลื่อนดูรูปสินค้า</div>
+                      <div>
+                        {safeActiveImageIndex + 1}/{imageUrls.length}
+                      </div>
+                    </div>
+                  ) : null}
+                  {hasMultipleImages ? (
+                    <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-1">
                       {imageUrls.map((url, index) => (
-                        <div
+                        <button
+                          type="button"
                           key={`${product.id || product.name}-preview-${index}`}
-                          className="aspect-square rounded-lg border border-zinc-200 overflow-hidden"
+                          className={`h-20 w-20 shrink-0 overflow-hidden rounded-lg border-2 bg-white ${
+                            index === safeActiveImageIndex
+                              ? "border-zinc-900"
+                              : "border-zinc-200"
+                          }`}
+                          onClick={() => this.selectGalleryImage(index)}
+                          aria-label={`ดูรูปที่ ${index + 1}`}
+                          aria-pressed={index === safeActiveImageIndex}
                         >
-                          <img src={url} alt={`${product.name}-${index + 1}`} className="h-full w-full object-cover" />
-                        </div>
+                          <img
+                            src={url}
+                            alt={`${product.name}-${index + 1}`}
+                            className="h-full w-full object-cover"
+                            draggable={false}
+                          />
+                        </button>
                       ))}
                     </div>
                   ) : null}
@@ -391,7 +574,19 @@ export class ProductDetailPage extends React.Component {
                   <div className="text-2xl font-semibold text-zinc-900 break-words">
                     {product?.name || "ไม่ระบุชื่อสินค้า"}
                   </div>
+                  <div
+                    className={`inline-flex w-fit rounded-full px-2.5 py-1 text-xs font-semibold ${
+                      isSold ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"
+                    }`}
+                  >
+                    {product?.getSaleStatusLabel?.() ?? "พร้อมขาย"}
+                  </div>
                   <div className="text-xl font-semibold text-zinc-800">{product?.getPriceLabel?.() ?? "฿0.00"}</div>
+                  {exchangeItem ? (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-zinc-700 break-words">
+                      ต้องการแลกกับ: <span className="font-medium text-zinc-900">{exchangeItem}</span>
+                    </div>
+                  ) : null}
 
                   <div className="grid max-w-md grid-cols-2 gap-2">
                     <button
@@ -406,9 +601,9 @@ export class ProductDetailPage extends React.Component {
                       type="button"
                       className="rounded-xl bg-zinc-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
                       onClick={this.onAddToCart}
-                      disabled={addingToCart}
+                      disabled={addingToCart || isSold}
                     >
-                      {addingToCart ? "กำลังเพิ่ม..." : "เพิ่มลงตะกร้า"}
+                      {addingToCart ? "กำลังเพิ่ม..." : isSold ? "ขายออกแล้ว" : "เพิ่มลงตะกร้า"}
                     </button>
                   </div>
 

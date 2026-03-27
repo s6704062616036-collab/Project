@@ -54,6 +54,26 @@ export class MockApiRouter {
     if (normalizedMethod === "GET" && pathname === "/api/myshop/products") {
       return this.store.listMyProducts();
     }
+    if (normalizedMethod === "GET" && pathname === "/api/myshop/parcel-payment-reviews") {
+      return this.store.listMyParcelPaymentReviews();
+    }
+    if (
+      normalizedMethod === "POST" &&
+      pathname.startsWith("/api/myshop/parcel-payment-reviews/") &&
+      pathname.includes("/shop-orders/") &&
+      pathname.endsWith("/decision")
+    ) {
+      const rawPath = pathname.slice("/api/myshop/parcel-payment-reviews/".length, -"/decision".length);
+      const [rawOrderId, rawShopOrdersSegment, rawShopOrderKey] = rawPath.split("/");
+      if (rawShopOrdersSegment !== "shop-orders") {
+        throw new Error(`Mock API ยังไม่รองรับ ${normalizedMethod} ${pathname}`);
+      }
+      return this.store.updateMyShopParcelPaymentReviewDecision(
+        decodeURIComponent(rawOrderId),
+        decodeURIComponent(rawShopOrderKey),
+        body,
+      );
+    }
     if (normalizedMethod === "POST" && pathname === "/api/myshop/products") {
       return this.store.createProduct(body);
     }
@@ -83,6 +103,9 @@ export class MockApiRouter {
       const rawId = pathname.slice("/api/products/".length);
       return this.store.getMarketplaceProductById(decodeURIComponent(rawId));
     }
+    if (normalizedMethod === "POST" && pathname === "/api/products/sale-status/sync") {
+      return this.store.syncProductSaleStatuses(body);
+    }
 
     // ---------- Cart ----------
     if (normalizedMethod === "GET" && pathname === "/api/cart") {
@@ -106,6 +129,23 @@ export class MockApiRouter {
     // ---------- Orders ----------
     if (normalizedMethod === "GET" && pathname === "/api/orders/me") {
       return this.store.listMyOrders();
+    }
+    if (
+      normalizedMethod === "POST" &&
+      pathname.startsWith("/api/orders/") &&
+      pathname.includes("/shop-orders/") &&
+      pathname.endsWith("/decision")
+    ) {
+      const rawPath = pathname.slice("/api/orders/".length, -"/decision".length);
+      const [rawOrderId, rawShopOrdersSegment, rawShopOrderKey] = rawPath.split("/");
+      if (rawShopOrdersSegment !== "shop-orders") {
+        throw new Error(`Mock API ยังไม่รองรับ ${normalizedMethod} ${pathname}`);
+      }
+      return this.store.updateMyOrderShopDecision(
+        decodeURIComponent(rawOrderId),
+        decodeURIComponent(rawShopOrderKey),
+        body,
+      );
     }
 
     // ---------- Chat ----------

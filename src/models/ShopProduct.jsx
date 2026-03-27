@@ -1,6 +1,10 @@
 import { ProductCategory } from "./ProductCategory";
+import { ProductSaleLifecycle } from "./ProductSaleLifecycle";
 
 export class ShopProduct {
+  static AVAILABLE = ProductSaleLifecycle.AVAILABLE;
+  static SOLD = ProductSaleLifecycle.SOLD;
+
   constructor({
     id,
     ownerId,
@@ -9,7 +13,11 @@ export class ShopProduct {
     imageUrl,
     imageUrls,
     price,
+    exchangeItem,
     description,
+    saleStatus,
+    soldAt,
+    soldOrderId,
     createdAt,
   } = {}) {
     const normalizedImageUrls = ShopProduct.normalizeImageUrls({
@@ -24,8 +32,16 @@ export class ShopProduct {
     this.imageUrl = normalizedImageUrls[0] ?? "";
     this.imageUrls = normalizedImageUrls;
     this.price = price ?? "";
+    this.exchangeItem = exchangeItem ?? "";
     this.description = description ?? "";
+    this.saleStatus = ShopProduct.normalizeSaleStatus(saleStatus);
+    this.soldAt = soldAt ?? "";
+    this.soldOrderId = soldOrderId ?? "";
     this.createdAt = createdAt ?? "";
+  }
+
+  static normalizeSaleStatus(value) {
+    return ProductSaleLifecycle.normalizeSaleStatus(value);
   }
 
   static normalizeImageUrls({ imageUrl, imageUrls } = {}) {
@@ -53,6 +69,7 @@ export class ShopProduct {
       imageUrl: "",
       imageUrls: [],
       price: "",
+      exchangeItem: "",
       description: "",
     });
   }
@@ -78,7 +95,19 @@ export class ShopProduct {
       imageUrl,
       imageUrls,
       price: json?.price,
+      exchangeItem:
+        json?.exchangeItem ??
+        json?.exchangeWanted ??
+        json?.wantedExchangeItem ??
+        json?.swapFor,
       description: json?.description,
+      saleStatus:
+        json?.saleStatus ??
+        json?.availabilityStatus ??
+        json?.inventoryStatus ??
+        (json?.isSold ? ShopProduct.SOLD : ShopProduct.AVAILABLE),
+      soldAt: json?.soldAt,
+      soldOrderId: json?.soldOrderId ?? json?.orderId,
       createdAt: json?.createdAt,
     });
   }
@@ -109,6 +138,18 @@ export class ShopProduct {
     return this.imageUrl ? [this.imageUrl] : [];
   }
 
+  isSold() {
+    return ProductSaleLifecycle.isSoldStatus(this.saleStatus);
+  }
+
+  isAvailable() {
+    return !this.isSold();
+  }
+
+  getSaleStatusLabel() {
+    return this.isSold() ? "ขายออกแล้ว" : "พร้อมขาย";
+  }
+
   validate({ imageFiles } = {}) {
     const selectedFiles = Array.isArray(imageFiles)
       ? imageFiles.filter(Boolean)
@@ -128,7 +169,9 @@ export class ShopProduct {
       name: this.name.trim(),
       category: this.category,
       price: this.getPriceNumber(),
+      exchangeItem: this.exchangeItem.trim(),
       description: this.description.trim(),
+      saleStatus: this.saleStatus,
     };
   }
 }

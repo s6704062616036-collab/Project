@@ -5,6 +5,10 @@ import { ShopProduct } from "../models/ShopProduct";
 import { ShopProfile } from "../models/ShopProfile";
 import { ProductCategory } from "../models/ProductCategory";
 import { ProfilePopup } from "../components/HeaderActionPopups";
+import {
+  ShopParcelPaymentVerificationModal,
+  ShopParcelPaymentVerificationPanel,
+} from "../components/ShopParcelPaymentVerification";
 
 export class MyShopPage extends React.Component {
   state = {
@@ -33,6 +37,13 @@ export class MyShopPage extends React.Component {
     shopSaving: false,
     shopError: "",
     shopDone: "",
+    paymentReviewsLoading: true,
+    paymentReviewsError: "",
+    paymentReviewsDone: "",
+    paymentReviews: [],
+    showPaymentReviewModal: false,
+    selectedPaymentReview: null,
+    paymentReviewSubmitting: false,
     profileDraft: null,
     profileAvatarFile: null,
     profileAvatarPreviewUrl: "",
@@ -45,7 +56,7 @@ export class MyShopPage extends React.Component {
   userService = UserService.instance();
 
   async componentDidMount() {
-    await Promise.all([this.loadProducts(), this.loadShopProfile()]);
+    await Promise.all([this.loadProducts(), this.loadShopProfile(), this.loadPaymentReviews()]);
   }
 
   componentWillUnmount() {
@@ -95,6 +106,139 @@ export class MyShopPage extends React.Component {
       });
     } finally {
       this.setState({ shopLoading: false });
+    }
+  };
+
+  loadPaymentReviews = async () => {
+    this.setState({ paymentReviewsLoading: true, paymentReviewsError: "" });
+    try {
+      const { reviews } = await this.myShopService.listParcelPaymentReviews();
+      this.setState({
+        paymentReviews: reviews ?? [],
+      });
+    } catch (e) {
+      this.setState({
+        paymentReviewsError: e?.message ?? "โหลดรายการตรวจสอบการชำระไม่สำเร็จ",
+      });
+    } finally {
+      this.setState({ paymentReviewsLoading: false });
+    }
+  };
+
+  openPaymentReviewModal = (review) => {
+    this.setState({
+      showPaymentReviewModal: true,
+      selectedPaymentReview: review ?? null,
+      paymentReviewsError: "",
+      paymentReviewsDone: "",
+    });
+  };
+
+  closePaymentReviewModal = () => {
+    this.setState({
+      showPaymentReviewModal: false,
+      selectedPaymentReview: null,
+      paymentReviewsError: "",
+      paymentReviewSubmitting: false,
+    });
+  };
+
+  syncPaymentReviewToState = (updatedReview) => {
+    if (!updatedReview?.orderId || !updatedReview?.shopOrderKey) return false;
+
+    const currentReviews = Array.isArray(this.state.paymentReviews) ? this.state.paymentReviews : [];
+    const hasTargetReview = currentReviews.some(
+      (review) =>
+        review?.orderId === updatedReview.orderId &&
+        review?.shopOrderKey === updatedReview.shopOrderKey,
+    );
+    if (!hasTargetReview) return false;
+
+    this.setState({
+      paymentReviews: currentReviews.map((review) =>
+        review?.orderId === updatedReview.orderId &&
+        review?.shopOrderKey === updatedReview.shopOrderKey
+          ? updatedReview
+          : review,
+      ),
+      selectedPaymentReview: updatedReview,
+    });
+    return true;
+  };
+
+  submitPaymentReviewDecision = async ({ action, note } = {}) => {
+    const review = this.state.selectedPaymentReview;
+    const orderId = `${review?.orderId ?? ""}`.trim();
+    const shopOrderKey = `${review?.shopOrderKey ?? ""}`.trim();
+    const normalizedAction = `${action ?? ""}`.trim();
+    const productIds = (review?.items ?? []).map((item) => item?.productId).filter(Boolean);
+
+    if (!orderId || !shopOrderKey || !normalizedAction) return;
+
+    if (typeof window !== "undefined") {
+      const confirmed = window.confirm(
+        normalizedAction === "approve"
+          ? "ยืนยันการสั่งซื้อและเปลี่ยนสถานะเป็นรอรับพัสดุใช่ไหม?"
+          : "ยืนยันว่าต้องการรายงานรายการนี้ไปยัง Admin ใช่ไหม?",
+      );
+      if (!confirmed) return;
+    }
+
+    this.setState({
+      paymentReviewSubmitting: true,
+      paymentReviewsError: "",
+      paymentReviewsDone: "",
+    });
+    try {
+      const result = await this.myShopService.updateParcelPaymentReviewDecision({
+        orderId,
+        shopOrderKey,
+        action: normalizedAction,
+        note,
+        productIds,
+        changedBy: this.props.user?.id,
+      });
+      let nextReviews = Array.isArray(this.state.paymentReviews) ? this.state.paymentReviews : [];
+      let refreshedReview = result?.review ?? null;
+
+      try {
+        const { reviews } = await this.myShopService.listParcelPaymentReviews();
+        nextReviews = reviews ?? [];
+        refreshedReview =
+          nextReviews.find(
+            (item) => item?.orderId === orderId && item?.shopOrderKey === shopOrderKey,
+          ) ??
+          refreshedReview;
+      } catch {
+        if (refreshedReview) {
+          const exists = nextReviews.some(
+            (item) => item?.orderId === orderId && item?.shopOrderKey === shopOrderKey,
+          );
+          nextReviews = exists
+            ? nextReviews.map((item) =>
+                item?.orderId === orderId && item?.shopOrderKey === shopOrderKey
+                  ? refreshedReview
+                  : item,
+              )
+            : [refreshedReview, ...nextReviews];
+        }
+      }
+
+      this.setState({
+        paymentReviews: nextReviews,
+        selectedPaymentReview: refreshedReview,
+        paymentReviewsDone:
+          result?.message ??
+          (normalizedAction === "approve"
+            ? "ยืนยันคำสั่งซื้อแล้ว สถานะเปลี่ยนเป็นรอรับพัสดุ"
+            : "รายงานรายการนี้ไปยัง Admin แล้ว"),
+      });
+    } catch (e) {
+      this.setState({
+        paymentReviewsError: e?.message ?? "อัปเดตรายการตรวจสอบการชำระไม่สำเร็จ",
+      });
+    } finally {
+      this.setState({ paymentReviewSubmitting: false });
     }
   };
 
@@ -547,6 +691,13 @@ export class MyShopPage extends React.Component {
       shopSaving,
       shopError,
       shopDone,
+      paymentReviewsLoading,
+      paymentReviewsError,
+      paymentReviewsDone,
+      paymentReviews,
+      showPaymentReviewModal,
+      selectedPaymentReview,
+      paymentReviewSubmitting,
       profileDraft,
       profileAvatarFile,
       profileAvatarPreviewUrl,
@@ -635,6 +786,15 @@ export class MyShopPage extends React.Component {
               onSave={this.saveShopProfile}
             />
 
+            <ShopParcelPaymentVerificationPanel
+              reviews={paymentReviews}
+              loading={paymentReviewsLoading}
+              error={paymentReviewsError}
+              done={paymentReviewsDone}
+              onRefresh={this.loadPaymentReviews}
+              onOpenReview={this.openPaymentReviewModal}
+            />
+
             {loading ? <div className="text-sm text-zinc-500">กำลังโหลด...</div> : null}
             {error && !showCreatePopup && !showEditPopup ? (
               <div className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</div>
@@ -679,6 +839,16 @@ export class MyShopPage extends React.Component {
             deleting={deleting}
             onCancel={this.closeDeleteConfirmPopup}
             onConfirmDelete={this.confirmDeleteProduct}
+          />
+        ) : null}
+
+        {showPaymentReviewModal && selectedPaymentReview ? (
+          <ShopParcelPaymentVerificationModal
+            review={selectedPaymentReview}
+            submitting={paymentReviewSubmitting}
+            error={paymentReviewsError}
+            onClose={this.closePaymentReviewModal}
+            onSubmitDecision={this.submitPaymentReviewDecision}
           />
         ) : null}
 
@@ -869,7 +1039,16 @@ class ProductCard extends React.Component {
 
         <div className="pt-3 space-y-1">
           <div className="flex items-start justify-between gap-2">
-            <div className="font-semibold break-words">{product.name || "ไม่ระบุชื่อสินค้า"}</div>
+            <div className="space-y-1">
+              <div className="font-semibold break-words">{product.name || "ไม่ระบุชื่อสินค้า"}</div>
+              <div
+                className={`inline-flex w-fit rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                  product?.isSold?.() ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"
+                }`}
+              >
+                {product?.getSaleStatusLabel?.() ?? "พร้อมขาย"}
+              </div>
+            </div>
             <div className="flex items-center gap-1">
               <button
                 type="button"
@@ -980,6 +1159,16 @@ class CreateProductModal extends React.Component {
                 className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none"
                 value={draftProduct.price}
                 onChange={(e) => onChangeField?.("price", e.target.value)}
+              />
+            </label>
+
+            <label className="space-y-1">
+              <div className="text-sm text-zinc-600">ของที่ต้องการแลกเปลี่ยน (ไม่บังคับ)</div>
+              <input
+                className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none"
+                placeholder="เช่น หนังสือการ์ตูน, ต้นไม้, อุปกรณ์ไอที"
+                value={draftProduct.exchangeItem}
+                onChange={(e) => onChangeField?.("exchangeItem", e.target.value)}
               />
             </label>
 
@@ -1123,6 +1312,16 @@ class EditProductModal extends React.Component {
                 className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none"
                 value={draftProduct.price}
                 onChange={(e) => onChangeField?.("price", e.target.value)}
+              />
+            </label>
+
+            <label className="space-y-1">
+              <div className="text-sm text-zinc-600">ของที่ต้องการแลกเปลี่ยน (ไม่บังคับ)</div>
+              <input
+                className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none"
+                placeholder="เช่น หนังสือการ์ตูน, ต้นไม้, อุปกรณ์ไอที"
+                value={draftProduct.exchangeItem}
+                onChange={(e) => onChangeField?.("exchangeItem", e.target.value)}
               />
             </label>
 

@@ -1,6 +1,9 @@
+import { ProductSaleLifecycle } from "../../models/ProductSaleLifecycle";
+import { ProductSaleSyncRequest } from "../../models/ProductSaleSyncRequest";
 import { ShippingMethod } from "../../models/ShippingMethod";
 
 const MOCK_DB_STORAGE_KEY = "myweb:mock-db:v1";
+const MOCK_DB_UPDATED_EVENT = "myweb:mock-db:updated";
 const DEFAULT_AVATAR_URL = "/App logo.jpg";
 const DEFAULT_PRODUCT_IMAGE_URL = "/vite.svg";
 
@@ -103,6 +106,44 @@ const normalizeShopProfileRecord = (shopInput = {}) => {
   };
 };
 
+const normalizeProductRecord = (productInput = {}) => {
+  const product = productInput && typeof productInput === "object" ? productInput : {};
+  const imageUrls = ensureArray(
+    product.imageUrls ?? product.images ?? product.productImages ?? (Array.isArray(product.image) ? product.image : []),
+  )
+    .map((item) => normalizeImageUrl(item, "product"))
+    .filter(Boolean);
+  const imageUrl = normalizeImageUrl(product.imageUrl ?? product.image, "product");
+  const normalizedImageUrls = [...new Set([imageUrl, ...imageUrls].filter(Boolean))];
+  const saleStatusInput =
+    product.saleStatus ??
+    product.availabilityStatus ??
+    product.inventoryStatus ??
+    (product.isSold ? "sold" : "available");
+  const saleStatus = ProductSaleLifecycle.normalizeSaleStatus(saleStatusInput);
+
+  return {
+    id: safeText(product.id ?? product._id) || createId("product"),
+    ownerId: safeText(product.ownerId),
+    name: safeText(product.name ?? product.productName),
+    category: safeText(product.category ?? product.productCategory ?? product.categoryName),
+    imageUrl: normalizedImageUrls[0] ?? buildFallbackImageUrl("product", "product"),
+    imageUrls: normalizedImageUrls.length ? normalizedImageUrls : [buildFallbackImageUrl("product", "product")],
+    price: toNumber(product.price, 0),
+    exchangeItem: safeText(
+      product.exchangeItem ??
+      product.exchangeWanted ??
+      product.wantedExchangeItem ??
+      product.swapFor,
+    ),
+    description: safeText(product.description),
+    saleStatus,
+    soldAt: safeText(product.soldAt),
+    soldOrderId: safeText(product.soldOrderId ?? product.orderId),
+    createdAt: safeText(product.createdAt) || nowIso(),
+  };
+};
+
 const normalizeUserRecord = (userInput = {}) => {
   const user = userInput && typeof userInput === "object" ? userInput : {};
   return {
@@ -113,6 +154,23 @@ const normalizeUserRecord = (userInput = {}) => {
     avatarUrl: normalizeImageUrl(user.avatarUrl, "avatar") || DEFAULT_AVATAR_URL,
     phone: safeText(user.phone),
     address: safeText(user.address),
+  };
+};
+
+const normalizeAdminReportRecord = (reportInput = {}) => {
+  const report = reportInput && typeof reportInput === "object" ? reportInput : {};
+  return {
+    id: safeText(report.id ?? report._id) || createId("admin_report"),
+    type: safeText(report.type) || "parcel_payment_receipt",
+    status: safeText(report.status) || "open",
+    reason: safeText(report.reason),
+    orderId: safeText(report.orderId),
+    shopOrderKey: safeText(report.shopOrderKey),
+    buyerId: safeText(report.buyerId),
+    reporterId: safeText(report.reporterId),
+    receiptImageUrl: normalizeImageUrl(report.receiptImageUrl, "product"),
+    createdAt: safeText(report.createdAt) || nowIso(),
+    resolvedAt: safeText(report.resolvedAt),
   };
 };
 
@@ -338,6 +396,7 @@ const createSeedState = () => {
       },
     ],
     orders: [],
+    adminReports: [],
     chats: [
       {
         id: "chat_seed_01",
@@ -404,9 +463,14 @@ export class MockDatabaseStore {
       shopProfiles: (Array.isArray(state.shopProfiles) ? state.shopProfiles : seed.shopProfiles).map((shop) =>
         normalizeShopProfileRecord(shop),
       ),
-      products: Array.isArray(state.products) ? state.products : seed.products,
+      products: (Array.isArray(state.products) ? state.products : seed.products).map((product) =>
+        normalizeProductRecord(product),
+      ),
       carts: Array.isArray(state.carts) ? state.carts : seed.carts,
       orders: Array.isArray(state.orders) ? state.orders : seed.orders,
+      adminReports: (Array.isArray(state.adminReports) ? state.adminReports : seed.adminReports).map((report) =>
+        normalizeAdminReportRecord(report),
+      ),
       chats: (Array.isArray(state.chats) ? state.chats : seed.chats).map((chat) =>
         normalizeChatRecord(chat),
       ),
@@ -441,6 +505,16 @@ export class MockDatabaseStore {
     if (!storage) return;
     try {
       storage.setItem(this.storageKey, JSON.stringify(this.state));
+      if (typeof window !== "undefined" && typeof window.dispatchEvent === "function") {
+        window.dispatchEvent(
+          new CustomEvent(MOCK_DB_UPDATED_EVENT, {
+            detail: {
+              storageKey: this.storageKey,
+              updatedAt: nowIso(),
+            },
+          }),
+        );
+      }
     } catch {
       // ignore storage quota issues in mock mode
     }
@@ -545,8 +619,102 @@ export class MockDatabaseStore {
       imageUrl: productRecord.imageUrl ?? "",
       imageUrls: Array.isArray(productRecord.imageUrls) ? [...productRecord.imageUrls] : [],
       price: toNumber(productRecord.price, 0),
+      exchangeItem: productRecord.exchangeItem ?? "",
       description: productRecord.description ?? "",
+      saleStatus: ProductSaleLifecycle.normalizeSaleStatus(productRecord.saleStatus),
+      soldAt: safeText(productRecord.soldAt),
+      soldOrderId: safeText(productRecord.soldOrderId),
+      isSold: ProductSaleLifecycle.isSoldStatus(productRecord.saleStatus),
       createdAt: productRecord.createdAt ?? "",
+    };
+  }
+
+  #isProductSold(productRecord) {
+    return ProductSaleLifecycle.isSoldStatus(productRecord?.saleStatus);
+  }
+
+  #shouldKeepProductReserved(status) {
+    return ProductSaleLifecycle.shouldKeepReserved(status);
+  }
+
+  #refreshProductSaleStatuses(productIds = []) {
+    const normalizedProductIds = [...new Set(
+      ensureArray(productIds).map((productId) => safeText(productId)).filter(Boolean),
+    )];
+
+    if (!normalizedProductIds.length) return;
+
+    this.state.products = ensureArray(this.state.products).map((product) => {
+      const productId = safeText(product?.id);
+      if (!normalizedProductIds.includes(productId)) return product;
+
+      let activeOrderReference = null;
+
+      ensureArray(this.state.orders).forEach((order) => {
+        const normalizedShopOrders =
+          Array.isArray(order?.shopOrders) && order.shopOrders.length
+            ? order.shopOrders
+            : [
+                {
+                  status: safeText(order?.status) || "completed",
+                  items: ensureArray(order?.items),
+                },
+              ];
+
+        normalizedShopOrders.forEach((shopOrder) => {
+          const containsProduct = ensureArray(shopOrder?.items).some(
+            (item) => safeText(item?.productId) === productId,
+          );
+          if (!containsProduct) return;
+
+          const orderStatus = safeText(shopOrder?.status) || safeText(order?.status);
+          if (!this.#shouldKeepProductReserved(orderStatus)) return;
+
+          const referenceCreatedAt = safeText(order?.createdAt);
+          if (
+            !activeOrderReference ||
+            toCreatedAtTime(referenceCreatedAt) >= toCreatedAtTime(activeOrderReference.createdAt)
+          ) {
+            activeOrderReference = {
+              orderId: safeText(order?.id),
+              orderStatus,
+              createdAt: referenceCreatedAt,
+            };
+          }
+        });
+      });
+
+      const nextSaleState = ProductSaleLifecycle.deriveState({
+        orderReferences: activeOrderReference ? [activeOrderReference] : [],
+        fallbackSoldAt: safeText(product?.soldAt),
+      });
+
+      return {
+        ...product,
+        ...nextSaleState,
+      };
+    });
+  }
+
+  syncProductSaleStatuses(payloadInput = {}) {
+    const request = payloadInput instanceof ProductSaleSyncRequest
+      ? payloadInput
+      : ProductSaleSyncRequest.fromJSON(toPayloadObject(payloadInput));
+
+    request.validate();
+    this.#refreshProductSaleStatuses(request.productIds);
+    this.#persist();
+
+    const products = request.productIds
+      .map((productId) => this.#findProductById(productId))
+      .map((product) => this.#toProductResponse(product))
+      .filter(Boolean);
+
+    return {
+      products,
+      message: request.shouldReleaseProducts()
+        ? "คืนสถานะสินค้าสำหรับคำสั่งซื้อที่ถูกยกเลิกแล้ว"
+        : "sync สถานะขายออกของสินค้าแล้ว",
     };
   }
 
@@ -699,18 +867,48 @@ export class MockDatabaseStore {
       return;
     }
 
+    if (statuses.every((status) => status === "completed")) {
+      orderRecord.status = "completed";
+      return;
+    }
+
+    if (statuses.some((status) => status === "reported_to_admin")) {
+      orderRecord.status = "reported_to_admin";
+      return;
+    }
+
+    if (statuses.some((status) => status === "rejected_by_buyer")) {
+      orderRecord.status = "rejected_by_buyer";
+      return;
+    }
+
     if (statuses.every((status) => status === "cancelled_by_seller")) {
       orderRecord.status = "cancelled_by_seller";
       return;
     }
 
-    if (statuses.every((status) => status === "awaiting_meetup")) {
+    if (statuses.some((status) => status === "awaiting_parcel_pickup")) {
+      orderRecord.status = "awaiting_parcel_pickup";
+      return;
+    }
+
+    if (statuses.some((status) => status === "awaiting_meetup")) {
       orderRecord.status = "awaiting_meetup";
       return;
     }
 
     if (statuses.some((status) => status === "countered_by_seller")) {
       orderRecord.status = "countered_by_seller";
+      return;
+    }
+
+    if (statuses.some((status) => ["pending_payment_verification", "pending_seller_confirmation"].includes(status))) {
+      orderRecord.status = "pending_payment_verification";
+      return;
+    }
+
+    if (statuses.some((status) => ["pending_meetup_response", "pending_seller_response"].includes(status))) {
+      orderRecord.status = "pending_meetup_response";
       return;
     }
 
@@ -823,6 +1021,9 @@ export class MockDatabaseStore {
             status: safeText(shopOrderRecord.meetupProposal.status),
             proposedBy: safeText(shopOrderRecord.meetupProposal.proposedBy),
             proposedAt: safeText(shopOrderRecord.meetupProposal.proposedAt),
+            responseLocation: safeText(shopOrderRecord.meetupProposal.responseLocation),
+            respondedBy: safeText(shopOrderRecord.meetupProposal.respondedBy),
+            respondedAt: safeText(shopOrderRecord.meetupProposal.respondedAt),
           }
         : null,
       parcelPayment: shopOrderRecord?.parcelPayment
@@ -831,6 +1032,14 @@ export class MockDatabaseStore {
             receiptImageUrl: normalizeImageUrl(shopOrderRecord.parcelPayment.receiptImageUrl, "product"),
             status: safeText(shopOrderRecord.parcelPayment.status),
             submittedAt: safeText(shopOrderRecord.parcelPayment.submittedAt),
+          }
+        : null,
+      adminReport: shopOrderRecord?.adminReport
+        ? {
+            reportId: safeText(shopOrderRecord.adminReport.reportId ?? shopOrderRecord.adminReport.id),
+            status: safeText(shopOrderRecord.adminReport.status),
+            reason: safeText(shopOrderRecord.adminReport.reason),
+            createdAt: safeText(shopOrderRecord.adminReport.createdAt),
           }
         : null,
       buyerShippingAddress: buyerShippingAddressRecord
@@ -867,6 +1076,35 @@ export class MockDatabaseStore {
         items.reduce((sum, item) => sum + (item.price ?? 0) * (item.quantity ?? 0), 0),
       ),
       createdAt: safeText(orderRecord.createdAt),
+    };
+  }
+
+  #toParcelPaymentReviewResponse(orderRecord, shopOrderRecord) {
+    if (!orderRecord || !shopOrderRecord || !ShippingMethod.isParcel(shopOrderRecord.shippingMethod)) {
+      return null;
+    }
+
+    const buyer = this.#findUserById(orderRecord.userId);
+    const shopOrder = this.#toOrderShopOrderResponse(shopOrderRecord);
+    if (!shopOrder) return null;
+
+    return {
+      orderId: safeText(orderRecord.id ?? orderRecord._id),
+      shopOrderKey: safeText(shopOrderRecord.shopId || shopOrderRecord.ownerId),
+      ownerId: safeText(shopOrderRecord.ownerId),
+      shopId: safeText(shopOrderRecord.shopId),
+      shopName: safeText(shopOrderRecord.shopName) || "ร้านค้า",
+      buyerId: safeText(orderRecord.userId),
+      buyerName: safeText(buyer?.name) || "ผู้ซื้อ",
+      buyerAvatarUrl: normalizeImageUrl(buyer?.avatarUrl, "avatar"),
+      status: safeText(shopOrderRecord.status),
+      items: ensureArray(shopOrder.items),
+      subtotal: toNumber(shopOrder.subtotal, 0),
+      createdAt: safeText(orderRecord.createdAt),
+      submittedAt: safeText(shopOrder.parcelPayment?.submittedAt) || safeText(orderRecord.createdAt),
+      receiptImageUrl: normalizeImageUrl(shopOrder.parcelPayment?.receiptImageUrl, "product"),
+      buyerShippingAddress: shopOrder.buyerShippingAddress,
+      adminReport: shopOrder.adminReport,
     };
   }
 
@@ -1072,8 +1310,35 @@ export class MockDatabaseStore {
     return { products };
   }
 
+  listMyParcelPaymentReviews() {
+    const user = this.#requireCurrentUser();
+    const reviews = this.state.orders
+      .flatMap((order) =>
+        ensureArray(order?.shopOrders).map((shopOrder) => ({
+          order,
+          shopOrder,
+        })),
+      )
+      .filter(
+        ({ shopOrder }) =>
+          safeText(shopOrder?.ownerId) === safeText(user.id) &&
+          ShippingMethod.isParcel(shopOrder?.shippingMethod),
+      )
+      .map(({ order, shopOrder }) => this.#toParcelPaymentReviewResponse(order, shopOrder))
+      .filter(Boolean)
+      .sort(
+        (a, b) =>
+          toCreatedAtTime(b?.submittedAt || b?.createdAt) -
+          toCreatedAtTime(a?.submittedAt || a?.createdAt),
+      );
+
+    return { reviews };
+  }
+
   listMarketplaceProducts() {
-    const products = sortByCreatedAtDesc(this.state.products).map((product) => this.#toProductResponse(product));
+    const products = sortByCreatedAtDesc(this.state.products)
+      .filter((product) => !this.#isProductSold(product))
+      .map((product) => this.#toProductResponse(product));
     return { products };
   }
 
@@ -1088,6 +1353,7 @@ export class MockDatabaseStore {
     const keyword = toLower(keywordInput);
     const products = sortByCreatedAtDesc(this.state.products)
       .filter((product) => {
+        if (this.#isProductSold(product)) return false;
         if (!keyword) return true;
         const source = `${product?.name ?? ""} ${product?.description ?? ""}`.toLowerCase();
         return source.includes(keyword);
@@ -1103,6 +1369,7 @@ export class MockDatabaseStore {
     const name = safeText(payload.name);
     const category = safeText(payload.category);
     const description = safeText(payload.description);
+    const exchangeItem = safeText(payload.exchangeItem);
     const price = Math.max(0, toNumber(payload.price, 0));
 
     if (!name) throw new Error("กรุณากรอกชื่อสินค้า");
@@ -1118,7 +1385,11 @@ export class MockDatabaseStore {
       imageUrl: imageUrls[0] ?? buildFallbackImageUrl("product", "product"),
       imageUrls,
       price,
+      exchangeItem,
       description,
+      saleStatus: "available",
+      soldAt: "",
+      soldOrderId: "",
       createdAt: nowIso(),
     };
 
@@ -1145,6 +1416,7 @@ export class MockDatabaseStore {
     const hasName = Object.prototype.hasOwnProperty.call(payload, "name");
     const hasCategory = Object.prototype.hasOwnProperty.call(payload, "category");
     const hasPrice = Object.prototype.hasOwnProperty.call(payload, "price");
+    const hasExchangeItem = Object.prototype.hasOwnProperty.call(payload, "exchangeItem");
     const hasDescription = Object.prototype.hasOwnProperty.call(payload, "description");
     const hasImageInput = ["image", "images", "imageUrl", "imageUrls"].some((key) =>
       Object.prototype.hasOwnProperty.call(payload, key),
@@ -1166,6 +1438,10 @@ export class MockDatabaseStore {
       const nextPrice = Math.max(0, toNumber(payload.price, 0));
       if (nextPrice <= 0) throw new Error("กรุณากรอกราคาสินค้าให้มากกว่า 0");
       product.price = nextPrice;
+    }
+
+    if (hasExchangeItem) {
+      product.exchangeItem = safeText(payload.exchangeItem);
     }
 
     if (hasDescription) {
@@ -1399,6 +1675,8 @@ export class MockDatabaseStore {
       shopOrder.status = "awaiting_meetup";
       shopOrder.meetupProposal.status = "awaiting_meetup";
       shopOrder.meetupProposal.proposedAt = shopOrder.meetupProposal.proposedAt || proposalMessage.meetupProposal.proposedAt;
+      shopOrder.meetupProposal.respondedBy = currentUser.id;
+      shopOrder.meetupProposal.respondedAt = respondedAt;
 
       this.#appendChatMessage(chat, {
         senderId: currentUser.id,
@@ -1412,7 +1690,9 @@ export class MockDatabaseStore {
 
       shopOrder.status = "countered_by_seller";
       shopOrder.meetupProposal.status = "countered_by_seller";
-      shopOrder.meetupProposal.location = nextLocation;
+      shopOrder.meetupProposal.responseLocation = nextLocation;
+      shopOrder.meetupProposal.respondedBy = currentUser.id;
+      shopOrder.meetupProposal.respondedAt = respondedAt;
 
       this.#appendChatMessage(chat, {
         senderId: currentUser.id,
@@ -1425,6 +1705,8 @@ export class MockDatabaseStore {
 
       shopOrder.status = "cancelled_by_seller";
       shopOrder.meetupProposal.status = "cancelled_by_seller";
+      shopOrder.meetupProposal.respondedBy = currentUser.id;
+      shopOrder.meetupProposal.respondedAt = respondedAt;
 
       this.#appendChatMessage(chat, {
         senderId: currentUser.id,
@@ -1433,6 +1715,9 @@ export class MockDatabaseStore {
     }
 
     this.#syncOrderStatusFromShopOrders(order);
+    this.#refreshProductSaleStatuses(
+      ensureArray(shopOrder.items).map((item) => item?.productId),
+    );
     chat.updatedAt = respondedAt;
     this.#persist();
 
@@ -1471,6 +1756,193 @@ export class MockDatabaseStore {
     return { orders };
   }
 
+  updateMyShopParcelPaymentReviewDecision(orderId, shopOrderKey, payloadInput = {}) {
+    const currentUser = this.#requireCurrentUser();
+    const payload = toPayloadObject(payloadInput);
+    const normalizedOrderId = safeText(orderId);
+    const normalizedShopOrderKey = safeText(shopOrderKey);
+    const action = safeText(payload.action);
+    const note = safeText(payload.note ?? payload.reason);
+
+    if (!normalizedOrderId) throw new Error("ไม่พบ orderId");
+    if (!normalizedShopOrderKey) throw new Error("ไม่พบ shopOrderKey");
+    if (!["approve", "report"].includes(action)) {
+      throw new Error("ไม่พบ action สำหรับตรวจสอบการชำระ");
+    }
+
+    const order = this.state.orders.find((item) => safeText(item?.id) === normalizedOrderId);
+    if (!order) throw new Error("ไม่พบคำสั่งซื้อที่ต้องการตรวจสอบ");
+
+    const shopOrder = ensureArray(order.shopOrders).find((item) => {
+      const identityKey = safeText(item?.shopId || item?.ownerId);
+      return (
+        identityKey === normalizedShopOrderKey &&
+        safeText(item?.ownerId) === safeText(currentUser.id) &&
+        ShippingMethod.isParcel(item?.shippingMethod)
+      );
+    });
+    if (!shopOrder) throw new Error("ไม่พบคำสั่งซื้อของร้านค้านี้");
+
+    const currentStatus = safeText(shopOrder.status);
+    if (!["pending_payment_verification", "pending_seller_confirmation"].includes(currentStatus)) {
+      throw new Error("คำสั่งซื้อนี้ถูกตรวจสอบแล้ว");
+    }
+
+    if (!shopOrder.parcelPayment) {
+      throw new Error("ไม่พบข้อมูลการชำระเงินของคำสั่งซื้อนี้");
+    }
+
+    const processedAt = nowIso();
+    const buyer = this.#findUserById(order.userId);
+    const sellerName = this.#findUserById(currentUser.id)?.name ?? "ร้านค้า";
+    const firstItem = ensureArray(shopOrder.items)[0] ?? null;
+
+    if (action === "approve") {
+      shopOrder.status = "awaiting_parcel_pickup";
+      shopOrder.parcelPayment.status = "approved";
+      shopOrder.parcelPayment.verifiedAt = processedAt;
+      shopOrder.parcelPayment.verifiedBy = currentUser.id;
+      shopOrder.adminReport = null;
+
+      if (firstItem?.productId) {
+        const chat = this.#findOrCreateCheckoutChat({
+          buyerId: order.userId,
+          ownerId: shopOrder.ownerId,
+          productId: firstItem.productId,
+        });
+        this.#appendChatMessage(chat, {
+          senderId: currentUser.id,
+          orderId: order.id,
+          text: `${sellerName} ยืนยันการชำระเงินสำหรับคำสั่งซื้อ #${order.id} แล้ว สถานะเปลี่ยนเป็นรอรับพัสดุ`,
+        });
+      }
+    } else {
+      const reportRecord = normalizeAdminReportRecord({
+        id: createId("admin_report"),
+        type: "parcel_payment_receipt",
+        status: "open",
+        reason: note || "ร้านค้าสงสัยว่าใบเสร็จอาจไม่ถูกต้อง",
+        orderId: order.id,
+        shopOrderKey: normalizedShopOrderKey,
+        buyerId: safeText(order.userId),
+        reporterId: safeText(currentUser.id),
+        receiptImageUrl: shopOrder.parcelPayment.receiptImageUrl,
+        createdAt: processedAt,
+      });
+
+      this.state.adminReports.push(reportRecord);
+      shopOrder.status = "reported_to_admin";
+      shopOrder.parcelPayment.status = "reported_to_admin";
+      shopOrder.adminReport = {
+        reportId: reportRecord.id,
+        status: reportRecord.status,
+        reason: reportRecord.reason,
+        createdAt: reportRecord.createdAt,
+      };
+
+      if (firstItem?.productId) {
+        const chat = this.#findOrCreateCheckoutChat({
+          buyerId: order.userId,
+          ownerId: shopOrder.ownerId,
+          productId: firstItem.productId,
+        });
+        this.#appendChatMessage(chat, {
+          senderId: currentUser.id,
+          orderId: order.id,
+          text: `${sellerName} รายงานใบเสร็จของคำสั่งซื้อ #${order.id} ให้ Admin ตรวจสอบแล้ว${reportRecord.reason ? `: ${reportRecord.reason}` : ""}`,
+        });
+      }
+    }
+
+    this.#syncOrderStatusFromShopOrders(order);
+    this.#refreshProductSaleStatuses(
+      ensureArray(shopOrder.items).map((item) => item?.productId),
+    );
+    this.#persist();
+
+    return {
+      review: this.#toParcelPaymentReviewResponse(order, shopOrder),
+      message:
+        action === "approve"
+          ? `ยืนยันคำสั่งซื้อของ ${buyer?.name ?? "ผู้ซื้อ"} แล้ว สถานะเปลี่ยนเป็นรอรับพัสดุ`
+          : "รายงานรายการนี้ไปยัง Admin แล้ว",
+    };
+  }
+
+  updateMyOrderShopDecision(orderId, shopOrderKey, payloadInput = {}) {
+    const currentUser = this.#requireCurrentUser();
+    const payload = toPayloadObject(payloadInput);
+    const normalizedOrderId = safeText(orderId);
+    const normalizedShopOrderKey = safeText(shopOrderKey);
+    const action = safeText(payload.action);
+
+    if (!normalizedOrderId) throw new Error("ไม่พบ orderId");
+    if (!normalizedShopOrderKey) throw new Error("ไม่พบ shopOrderKey");
+    if (!["receive", "reject"].includes(action)) {
+      throw new Error("ไม่พบ action สำหรับอัปเดตคำสั่งซื้อ");
+    }
+
+    const order = this.state.orders.find(
+      (item) =>
+        safeText(item?.id) === normalizedOrderId &&
+        safeText(item?.userId) === safeText(currentUser.id),
+    );
+    if (!order) throw new Error("ไม่พบคำสั่งซื้อของผู้ใช้");
+
+    const shopOrder = ensureArray(order.shopOrders).find((item) => {
+      const identityKey = safeText(item?.shopId || item?.ownerId);
+      return identityKey === normalizedShopOrderKey;
+    });
+    if (!shopOrder) throw new Error("ไม่พบคำสั่งซื้อของร้านค้านี้");
+
+    const currentStatus = safeText(shopOrder.status);
+    if (["completed", "rejected", "rejected_by_buyer", "cancelled", "cancelled_by_seller"].includes(currentStatus)) {
+      throw new Error("คำสั่งซื้อนี้ถูกปิดแล้ว");
+    }
+
+    if (action === "receive") {
+      shopOrder.status = "completed";
+      if (shopOrder.meetupProposal) shopOrder.meetupProposal.status = "completed";
+      if (shopOrder.parcelPayment) shopOrder.parcelPayment.status = "completed";
+    } else {
+      shopOrder.status = "rejected_by_buyer";
+      if (shopOrder.meetupProposal) shopOrder.meetupProposal.status = "rejected_by_buyer";
+      if (shopOrder.parcelPayment) shopOrder.parcelPayment.status = "rejected_by_buyer";
+    }
+
+    const firstItem = ensureArray(shopOrder.items)[0] ?? null;
+    if (firstItem?.productId) {
+      const chat = this.#findOrCreateCheckoutChat({
+        buyerId: currentUser.id,
+        ownerId: shopOrder.ownerId,
+        productId: firstItem.productId,
+      });
+      const buyerName = this.#findUserById(currentUser.id)?.name ?? "ผู้ซื้อ";
+      this.#appendChatMessage(chat, {
+        senderId: currentUser.id,
+        orderId: order.id,
+        text:
+          action === "receive"
+            ? `${buyerName} กดยืนยันรับของสำหรับคำสั่งซื้อ #${order.id} แล้ว`
+            : `${buyerName} กดปฏิเสธของสำหรับคำสั่งซื้อ #${order.id} แล้ว`,
+      });
+    }
+
+    this.#syncOrderStatusFromShopOrders(order);
+    this.#refreshProductSaleStatuses(
+      ensureArray(shopOrder.items).map((item) => item?.productId),
+    );
+    this.#persist();
+
+    return {
+      order: this.#toOrderResponse(order),
+      message:
+        action === "receive"
+          ? "อัปเดตสถานะเป็นรับของแล้ว"
+          : "อัปเดตสถานะเป็นปฏิเสธของแล้ว",
+    };
+  }
+
   addCartItem(payloadInput = {}) {
     const user = this.#requireCurrentUser();
     const payload = toPayloadObject(payloadInput);
@@ -1479,6 +1951,7 @@ export class MockDatabaseStore {
     const product = this.#findProductById(productId);
 
     if (!product) throw new Error("ไม่พบสินค้าที่ต้องการเพิ่มลงตะกร้า");
+    if (this.#isProductSold(product)) throw new Error("สินค้านี้ขายออกแล้ว");
 
     const cart = this.#getOrCreateCart(user.id);
     if (!Array.isArray(cart.items)) cart.items = [];
@@ -1541,6 +2014,10 @@ export class MockDatabaseStore {
     if (!cartItems.length) throw new Error("ไม่พบสินค้าในตะกร้า");
 
     const resolvedItems = cartItems.map((item) => this.#toCartItemResponse(cart, item));
+    const soldCartItem = resolvedItems.find((item) => this.#isProductSold(this.#findProductById(item?.productId)));
+    if (soldCartItem) {
+      throw new Error(`สินค้า ${soldCartItem?.name ?? ""} ขายออกแล้ว กรุณาลบออกจากตะกร้า`);
+    }
     const rawShopOrders = Array.isArray(payload.shopOrders)
       ? payload.shopOrders
       : tryParseJson(payload.shopOrders, []);
@@ -1566,6 +2043,22 @@ export class MockDatabaseStore {
         createdAt: nowIso(),
       };
 
+      const soldProductIds = new Set(resolvedItems.map((item) => safeText(item?.productId)).filter(Boolean));
+      this.state.products = this.state.products.map((product) => {
+        if (!soldProductIds.has(safeText(product?.id))) return product;
+        return {
+          ...product,
+          saleStatus: "sold",
+          soldAt: createdOrder.createdAt,
+          soldOrderId: createdOrder.id,
+        };
+      });
+      this.state.carts = ensureArray(this.state.carts).map((currentCart) => ({
+        ...currentCart,
+        items: ensureArray(currentCart?.items).filter(
+          (item) => !soldProductIds.has(safeText(item?.productId)),
+        ),
+      }));
       this.state.orders.push(createdOrder);
       cart.items = [];
       this.#persist();
@@ -1748,8 +2241,30 @@ export class MockDatabaseStore {
       }
     });
 
+    const soldProductIds = new Set(
+      normalizedShopOrders.flatMap((shopOrder) => shopOrder.items.map((item) => safeText(item?.productId))).filter(Boolean),
+    );
+    this.state.products = this.state.products.map((product) => {
+      if (!soldProductIds.has(safeText(product?.id))) return product;
+      return {
+        ...product,
+        saleStatus: "sold",
+        soldAt: createdAt,
+        soldOrderId: createdOrder.id,
+      };
+    });
+    this.state.carts = ensureArray(this.state.carts).map((currentCart) => ({
+      ...currentCart,
+      items: ensureArray(currentCart?.items).filter(
+        (item) => !soldProductIds.has(safeText(item?.productId)),
+      ),
+    }));
     this.state.orders.push(createdOrder);
-    cart.items = cartItems.filter((item) => !consumedItemIds.has(safeText(item?.id)));
+    cart.items = ensureArray(cart.items).filter(
+      (item) =>
+        !consumedItemIds.has(safeText(item?.id)) &&
+        !soldProductIds.has(safeText(item?.productId)),
+    );
     this.#persist();
 
     return {

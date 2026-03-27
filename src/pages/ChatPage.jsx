@@ -1,5 +1,6 @@
 import React from "react";
 import { ChatService } from "../services/ChatService";
+import { RealtimeSyncManager } from "../utils/RealtimeSyncManager";
 
 const safeText = (value) => `${value ?? ""}`.trim();
 
@@ -22,9 +23,20 @@ export class ChatPage extends React.Component {
   };
 
   chatService = ChatService.instance();
+  realtimeSync = new RealtimeSyncManager({
+    onRefresh: () => this.refreshChatsAndMessages(),
+    databasePollIntervalMs: 4000,
+  });
+  realtimeRefreshInFlight = false;
+  pendingRealtimeRefresh = false;
 
   async componentDidMount() {
     await this.loadChats({ preferredChatId: this.props.initialChatId });
+    this.realtimeSync.start();
+  }
+
+  componentWillUnmount() {
+    this.realtimeSync.stop();
   }
 
   async componentDidUpdate(prevProps) {
@@ -40,6 +52,25 @@ export class ChatPage extends React.Component {
 
     await this.loadChats({ preferredChatId: nextInitialChatId });
   }
+
+  refreshChatsAndMessages = async () => {
+    if (this.realtimeRefreshInFlight) {
+      this.pendingRealtimeRefresh = true;
+      return;
+    }
+
+    this.realtimeRefreshInFlight = true;
+    try {
+      await this.loadChats({ preferredChatId: this.state.selectedChatId });
+    } finally {
+      this.realtimeRefreshInFlight = false;
+    }
+
+    if (this.pendingRealtimeRefresh) {
+      this.pendingRealtimeRefresh = false;
+      this.refreshChatsAndMessages();
+    }
+  };
 
   loadChats = async ({ preferredChatId } = {}) => {
     this.setState({ loadingChats: true, chatsError: "" });
