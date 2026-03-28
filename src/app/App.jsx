@@ -7,6 +7,8 @@ import { ProductDetailPage } from "../pages/ProductDetailPage";
 import { SearchProductsPage } from "../pages/SearchProductsPage";
 import { ChatPage } from "../pages/ChatPage";
 import { MyOrdersPage } from "../pages/MyOrdersPage";
+import { AdminPage } from "../pages/AdminPage";
+import { SellerStorefrontPage } from "../pages/SellerStorefrontPage";
 import { AuthService } from "../services/AuthService";
 import { DataModeSwitchWidget } from "./DataModeSwitchWidget";
 
@@ -15,13 +17,14 @@ export default class App extends React.Component {
     route: "login",
     user: null,
     selectedProduct: null,
+    selectedSellerOwnerId: "",
     searchKeyword: "",
     selectedChatId: "",
     booting: true,
   };
 
   auth = AuthService.instance();
-  appRoutes = new Set(["login", "register", "home", "myshop", "product", "search", "chat", "orders"]);
+  appRoutes = new Set(["login", "register", "home", "myshop", "product", "seller", "search", "chat", "orders", "admin"]);
 
   async componentDidMount() {
     if (typeof window !== "undefined") {
@@ -35,7 +38,7 @@ export default class App extends React.Component {
       const me = await this.auth.me?.();
       if (me?.user) {
         nextUser = me.user;
-        nextRoute = "home";
+        nextRoute = me.user?.isAdmin?.() ? "admin" : "home";
       }
     } catch {
       // ignore
@@ -59,6 +62,20 @@ export default class App extends React.Component {
     }
   }
 
+  componentDidUpdate() {
+    const user = this.state.user;
+    const isAdmin = user?.isAdmin?.();
+
+    if (isAdmin && this.state.route !== "admin") {
+      this.navigate("admin", { replace: true });
+      return;
+    }
+
+    if (!isAdmin && this.state.route === "admin") {
+      this.navigate(user ? "home" : "login", { replace: true });
+    }
+  }
+
   onPopState = (event) => {
     const historyState = event?.state;
     const route = historyState?.route;
@@ -67,6 +84,7 @@ export default class App extends React.Component {
     this.setState({
       route,
       selectedProduct: historyState?.selectedProduct ?? null,
+      selectedSellerOwnerId: historyState?.selectedSellerOwnerId ?? "",
       searchKeyword: historyState?.searchKeyword ?? "",
       selectedChatId: historyState?.selectedChatId ?? "",
     });
@@ -79,6 +97,7 @@ export default class App extends React.Component {
     const safePayload = {
       route: this.state.route,
       selectedProduct: this.state.selectedProduct ? { ...this.state.selectedProduct } : null,
+      selectedSellerOwnerId: this.state.selectedSellerOwnerId ?? "",
       searchKeyword: this.state.searchKeyword ?? "",
       selectedChatId: this.state.selectedChatId ?? "",
     };
@@ -90,6 +109,7 @@ export default class App extends React.Component {
         {
           route: safePayload.route,
           selectedProduct: null,
+          selectedSellerOwnerId: safePayload.selectedSellerOwnerId,
           searchKeyword: safePayload.searchKeyword,
           selectedChatId: safePayload.selectedChatId,
         },
@@ -103,6 +123,7 @@ export default class App extends React.Component {
     if (!this.appRoutes.has(route)) return;
 
     const hasSelectedProduct = Object.prototype.hasOwnProperty.call(patch, "selectedProduct");
+    const hasSelectedSellerOwnerId = Object.prototype.hasOwnProperty.call(patch, "selectedSellerOwnerId");
     const hasSearchKeyword = Object.prototype.hasOwnProperty.call(patch, "searchKeyword");
     const hasSelectedChatId = Object.prototype.hasOwnProperty.call(patch, "selectedChatId");
 
@@ -111,6 +132,9 @@ export default class App extends React.Component {
         ...patch,
         route,
         selectedProduct: hasSelectedProduct ? patch.selectedProduct : this.state.selectedProduct,
+        selectedSellerOwnerId: hasSelectedSellerOwnerId
+          ? patch.selectedSellerOwnerId
+          : this.state.selectedSellerOwnerId,
         searchKeyword: hasSearchKeyword ? patch.searchKeyword : this.state.searchKeyword,
         selectedChatId: hasSelectedChatId ? patch.selectedChatId : this.state.selectedChatId,
       },
@@ -122,7 +146,14 @@ export default class App extends React.Component {
 
   go = (route) => this.navigate(route);
 
-  onLoggedIn = (user) => this.navigate("home", { patch: { user, selectedProduct: null } });
+  getAuthenticatedLandingRoute(user = this.state.user) {
+    return user?.isAdmin?.() ? "admin" : "home";
+  }
+
+  onLoggedIn = (user) =>
+    this.navigate(this.getAuthenticatedLandingRoute(user), {
+      patch: { user, selectedProduct: null, selectedSellerOwnerId: "" },
+    });
 
   onRegistered = () => this.navigate("login");
 
@@ -133,6 +164,7 @@ export default class App extends React.Component {
       patch: {
         user: null,
         selectedProduct: null,
+        selectedSellerOwnerId: "",
         searchKeyword: "",
         selectedChatId: "",
       },
@@ -140,16 +172,40 @@ export default class App extends React.Component {
     });
   onGoMyShop = () => this.navigate("myshop");
   onGoMyOrders = () => this.navigate("orders");
-  onBackHome = () => this.navigate("home", { patch: { selectedProduct: null, selectedChatId: "" } });
+  onBackHome = () =>
+    this.navigate("home", {
+      patch: { selectedProduct: null, selectedSellerOwnerId: "", selectedChatId: "" },
+    });
   onOpenProduct = (product) =>
-    this.navigate("product", { patch: { selectedProduct: product ?? null, selectedChatId: "" } });
+    this.navigate("product", {
+      patch: { selectedProduct: product ?? null, selectedSellerOwnerId: "", selectedChatId: "" },
+    });
+  onOpenSellerProfile = (ownerId) =>
+    this.navigate("seller", {
+      patch: {
+        selectedProduct: null,
+        selectedSellerOwnerId: `${ownerId ?? ""}`.trim(),
+        selectedChatId: "",
+      },
+    });
   onOpenSearch = (keyword) =>
     this.navigate("search", {
-      patch: { searchKeyword: keyword ?? "", selectedProduct: null, selectedChatId: "" },
+      patch: {
+        searchKeyword: keyword ?? "",
+        selectedProduct: null,
+        selectedSellerOwnerId: "",
+        selectedChatId: "",
+      },
     });
   onGoChat = ({ chatId } = {}) => {
     const normalizedChatId = `${chatId ?? ""}`.trim();
-    const patch = normalizedChatId ? { selectedChatId: normalizedChatId, selectedProduct: null } : { selectedProduct: null };
+    const patch = normalizedChatId
+      ? {
+          selectedChatId: normalizedChatId,
+          selectedProduct: null,
+          selectedSellerOwnerId: "",
+        }
+      : { selectedProduct: null, selectedSellerOwnerId: "" };
     this.navigate("chat", { patch });
   };
 
@@ -161,6 +217,7 @@ export default class App extends React.Component {
         patch: {
           user: null,
           selectedProduct: null,
+          selectedSellerOwnerId: "",
           searchKeyword: "",
           selectedChatId: "",
         },
@@ -179,7 +236,7 @@ export default class App extends React.Component {
   }
 
   render() {
-    const { route, user, selectedProduct, searchKeyword, selectedChatId, booting } = this.state;
+    const { route, user, selectedProduct, selectedSellerOwnerId, searchKeyword, selectedChatId, booting } = this.state;
     if (booting) return null;
 
     // guard (ป้องกันผู้ใช้ที่ยังไม่ login เข้าหน้าในระบบผ่าน browser back)
@@ -210,6 +267,15 @@ export default class App extends React.Component {
       );
     }
 
+    if (user?.isAdmin?.()) {
+      return this.renderWithDataModeSwitch(
+        <AdminPage
+          user={user}
+          onLogout={this.onLogout}
+        />
+      );
+    }
+
     if (route === "myshop") {
       return this.renderWithDataModeSwitch(
         <MyShopPage
@@ -229,6 +295,23 @@ export default class App extends React.Component {
       return this.renderWithDataModeSwitch(
         <ProductDetailPage
           product={selectedProduct}
+          user={user}
+          onGoHome={this.onBackHome}
+          onSubmitSearch={this.onOpenSearch}
+          onOpenProduct={this.onOpenProduct}
+          onOpenSellerProfile={this.onOpenSellerProfile}
+          onGoMyShop={this.onGoMyShop}
+          onGoMyOrders={this.onGoMyOrders}
+          onLogout={this.onLogout}
+          onGoChat={this.onGoChat}
+        />
+      );
+    }
+
+    if (route === "seller") {
+      return this.renderWithDataModeSwitch(
+        <SellerStorefrontPage
+          ownerId={selectedSellerOwnerId}
           user={user}
           onGoHome={this.onBackHome}
           onSubmitSearch={this.onOpenSearch}

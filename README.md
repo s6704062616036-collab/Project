@@ -38,3 +38,12 @@ Integration points:
 - `src/app/App.jsx`
 
 Search keyword: `DATA_MODE_SWITCH`
+
+## Database Contracts
+
+Real database integration contracts used by the current frontend:
+
+- `docs/SHOP_KYC_DATABASE_CONTRACT.md`
+- `docs/SELLER_STOREFRONT_DATABASE_CONTRACT.md`
+- `docs/CONTENT_REPORT_DATABASE_CONTRACT.md`
+- `docs/PARCEL_PAYMENT_REVIEW_DATABASE_CONTRACT.md`

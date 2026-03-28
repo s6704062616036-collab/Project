@@ -33,6 +33,68 @@ export class MockApiRouter {
       return this.store.logout();
     }
 
+    // ---------- Public categories ----------
+    if (normalizedMethod === "GET" && pathname === "/api/categories") {
+      return this.store.listPublicCategories();
+    }
+
+    // ---------- Public reports ----------
+    if (normalizedMethod === "POST" && pathname.startsWith("/api/reports/products/")) {
+      const rawProductId = pathname.slice("/api/reports/products/".length);
+      return this.store.createProductReport(decodeURIComponent(rawProductId), body);
+    }
+    if (
+      normalizedMethod === "POST" &&
+      pathname.startsWith("/api/reports/shops/owner/")
+    ) {
+      const rawOwnerId = pathname.slice("/api/reports/shops/owner/".length);
+      return this.store.createShopReport(decodeURIComponent(rawOwnerId), body);
+    }
+
+    // ---------- Admin ----------
+    if (normalizedMethod === "GET" && pathname === "/api/admin/dashboard") {
+      return this.store.adminDashboard();
+    }
+    if (normalizedMethod === "GET" && pathname === "/api/admin/members") {
+      return this.store.listAdminMembers();
+    }
+    if (
+      normalizedMethod === "POST" &&
+      pathname.startsWith("/api/admin/members/") &&
+      pathname.endsWith("/decision")
+    ) {
+      const rawMemberId = pathname.slice("/api/admin/members/".length, -"/decision".length);
+      return this.store.updateAdminMemberDecision(decodeURIComponent(rawMemberId), body);
+    }
+    if (normalizedMethod === "GET" && pathname === "/api/admin/reports") {
+      return this.store.listAdminProductReports();
+    }
+    if (
+      normalizedMethod === "POST" &&
+      pathname.startsWith("/api/admin/reports/") &&
+      pathname.endsWith("/decision")
+    ) {
+      const rawReportId = pathname.slice("/api/admin/reports/".length, -"/decision".length);
+      return this.store.updateAdminProductReportDecision(decodeURIComponent(rawReportId), body);
+    }
+    if (normalizedMethod === "GET" && pathname === "/api/admin/categories") {
+      return this.store.listAdminCategories();
+    }
+    if (normalizedMethod === "POST" && pathname === "/api/admin/categories") {
+      return this.store.createAdminCategory(body);
+    }
+    if (
+      (normalizedMethod === "PATCH" || normalizedMethod === "PUT") &&
+      pathname.startsWith("/api/admin/categories/")
+    ) {
+      const rawCategoryId = pathname.slice("/api/admin/categories/".length);
+      return this.store.updateAdminCategory(decodeURIComponent(rawCategoryId), body);
+    }
+    if (normalizedMethod === "DELETE" && pathname.startsWith("/api/admin/categories/")) {
+      const rawCategoryId = pathname.slice("/api/admin/categories/".length);
+      return this.store.deleteAdminCategory(decodeURIComponent(rawCategoryId));
+    }
+
     // ---------- User ----------
     if (normalizedMethod === "GET" && pathname === "/api/users/me") {
       return this.store.userMe();
@@ -87,6 +149,24 @@ export class MockApiRouter {
     if (normalizedMethod === "DELETE" && pathname.startsWith("/api/myshop/products/")) {
       const rawProductId = pathname.slice("/api/myshop/products/".length);
       return this.store.deleteMyProduct(decodeURIComponent(rawProductId));
+    }
+
+    // ---------- Public shops ----------
+    if (
+      normalizedMethod === "GET" &&
+      pathname.startsWith("/api/shops/owner/") &&
+      pathname.endsWith("/storefront")
+    ) {
+      const rawOwnerId = pathname.slice("/api/shops/owner/".length, -"/storefront".length);
+      return this.store.getSellerStorefrontByOwnerId(decodeURIComponent(rawOwnerId));
+    }
+    if (
+      normalizedMethod === "GET" &&
+      pathname.startsWith("/api/sellers/") &&
+      pathname.endsWith("/storefront")
+    ) {
+      const rawOwnerId = pathname.slice("/api/sellers/".length, -"/storefront".length);
+      return this.store.getSellerStorefrontByOwnerId(decodeURIComponent(rawOwnerId));
     }
 
     // ---------- Products ----------

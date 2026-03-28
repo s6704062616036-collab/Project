@@ -193,7 +193,7 @@ export class MyOrdersPage extends React.Component {
               onClick={() => this.props.onGoChat?.()}
               title="แชท"
             >
-              💬
+              <img src="/chat.svg" alt="แชท" className="h-5 w-5 object-contain" />
             </button>
 
             <button
@@ -202,7 +202,7 @@ export class MyOrdersPage extends React.Component {
               onClick={this.openProfilePopup}
               title="บัญชี"
             >
-              👤
+              <img src="/account.svg" alt="บัญชี" className="h-5 w-5 object-contain" />
             </button>
           </div>
         </div>
@@ -365,6 +365,13 @@ class OrderShopSection extends React.Component {
             <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_14rem]">
               <div className="space-y-2">
                 <div className="rounded-xl border border-zinc-200 bg-white p-3">
+                  <div className="text-xs text-zinc-500">วิธีชำระ</div>
+                  <div className="text-sm text-zinc-700">
+                    {shopOrder?.parcelPayment?.getPaymentMethodLabel?.() ?? "ชำระเงินด้วย QR code"}
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-zinc-200 bg-white p-3">
                   <div className="text-xs text-zinc-500">ผู้รับ</div>
                   <div className="text-sm text-zinc-700">
                     {shopOrder?.getRecipientLine?.() || "ยังไม่ได้ระบุชื่อหรือเบอร์โทร"}
@@ -387,7 +394,13 @@ class OrderShopSection extends React.Component {
                     className="max-h-60 w-full object-contain"
                   />
                 </div>
-              ) : null}
+              ) : (
+                <div className="grid place-items-center rounded-2xl border border-dashed border-zinc-300 bg-white p-4 text-center text-sm text-zinc-500">
+                  {shopOrder?.parcelPayment?.requiresReceipt?.() === false
+                    ? "รายการนี้เป็นเก็บเงินปลายทาง จึงไม่มีใบเสร็จแนบ"
+                    : "ร้านค้ากำลังรอตรวจสอบใบเสร็จ"}
+                </div>
+              )}
             </div>
           </div>
         ) : null}

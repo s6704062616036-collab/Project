@@ -4,6 +4,7 @@ import { UserService } from "../services/UserService";
 import { ShopProduct } from "../models/ShopProduct";
 import { ShopProfile } from "../models/ShopProfile";
 import { ProductCategory } from "../models/ProductCategory";
+import { CategoryService } from "../services/CategoryService";
 import { ProfilePopup } from "../components/HeaderActionPopups";
 import {
   ShopParcelPaymentVerificationModal,
@@ -18,6 +19,7 @@ export class MyShopPage extends React.Component {
     error: "",
     done: "",
     products: [],
+    categories: ProductCategory.list(),
     showCreatePopup: false,
     showEditPopup: false,
     showDeleteConfirmPopup: false,
@@ -31,6 +33,7 @@ export class MyShopPage extends React.Component {
     editImageFiles: [],
     editImagePreviewUrls: [],
     shopLoading: true,
+    shopProfile: ShopProfile.empty(),
     shopDraft: ShopProfile.empty(),
     shopQrFile: null,
     shopQrPreviewUrl: "",
@@ -54,9 +57,10 @@ export class MyShopPage extends React.Component {
 
   myShopService = MyShopService.instance();
   userService = UserService.instance();
+  categoryService = CategoryService.instance();
 
   async componentDidMount() {
-    await Promise.all([this.loadProducts(), this.loadShopProfile(), this.loadPaymentReviews()]);
+    await Promise.all([this.loadCategories(), this.loadProducts(), this.loadShopProfile(), this.loadPaymentReviews()]);
   }
 
   componentWillUnmount() {
@@ -93,12 +97,25 @@ export class MyShopPage extends React.Component {
     }
   };
 
+  loadCategories = async () => {
+    try {
+      const { categories } = await this.categoryService.listCategories();
+      this.setState({
+        categories: categories ?? ProductCategory.list(),
+      });
+    } catch {
+      this.setState({ categories: ProductCategory.list() });
+    }
+  };
+
   loadShopProfile = async () => {
     this.setState({ shopLoading: true, shopError: "" });
     try {
       const { shop } = await this.myShopService.me();
+      const nextShop = shop ?? ShopProfile.empty();
       this.setState({
-        shopDraft: shop ?? ShopProfile.empty(),
+        shopProfile: nextShop,
+        shopDraft: nextShop.toEditableDraft(),
       });
     } catch (e) {
       this.setState({
@@ -179,7 +196,9 @@ export class MyShopPage extends React.Component {
       const confirmed = window.confirm(
         normalizedAction === "approve"
           ? "ยืนยันการสั่งซื้อและเปลี่ยนสถานะเป็นรอรับพัสดุใช่ไหม?"
-          : "ยืนยันว่าต้องการรายงานรายการนี้ไปยัง Admin ใช่ไหม?",
+          : normalizedAction === "cancel"
+            ? "ยืนยันว่าต้องการยกเลิกคำสั่งซื้อนี้ใช่ไหม?"
+            : "ยืนยันการดำเนินการกับรายการนี้ใช่ไหม?",
       );
       if (!confirmed) return;
     }
@@ -231,7 +250,9 @@ export class MyShopPage extends React.Component {
           result?.message ??
           (normalizedAction === "approve"
             ? "ยืนยันคำสั่งซื้อแล้ว สถานะเปลี่ยนเป็นรอรับพัสดุ"
-            : "รายงานรายการนี้ไปยัง Admin แล้ว"),
+            : normalizedAction === "cancel"
+              ? "ยกเลิกคำสั่งซื้อแล้ว"
+              : "อัปเดตรายการตรวจสอบการชำระแล้ว"),
       });
     } catch (e) {
       this.setState({
@@ -324,8 +345,11 @@ export class MyShopPage extends React.Component {
   };
 
   setShopDraftField = (key, value) => {
+    const normalizedValue =
+      key === "citizenId" ? ShopProfile.normalizeCitizenId(value) : value;
+
     this.setState((state) => ({
-      shopDraft: state.shopDraft.withPatch({ [key]: value }),
+      shopDraft: state.shopDraft.withPatch({ [key]: normalizedValue }),
       shopError: "",
       shopDone: "",
     }));
@@ -346,20 +370,54 @@ export class MyShopPage extends React.Component {
   };
 
   saveShopProfile = async () => {
-    const { shopDraft, shopQrFile } = this.state;
+    const { shopProfile, shopDraft, shopQrFile } = this.state;
+    const hasNewQrFile = Boolean(shopQrFile);
+    const canDirectSave = shopProfile.canDirectSave({ hasNewQrFile });
+    const validationError = shopDraft.validate({
+      requireQrCode: !canDirectSave,
+      hasQrFile: Boolean(shopQrFile) || Boolean(shopDraft?.parcelQrCodeUrl),
+    });
+
+    if (shopProfile.isCitizenIdLocked() && shopDraft.citizenId !== shopProfile.citizenId) {
+      this.setState({ shopError: "เลขบัตรประชาชนจะไม่สามารถแก้ไขได้หลังได้รับอนุมัติ KYC" });
+      return;
+    }
+
+    if (validationError) {
+      this.setState({ shopError: validationError });
+      return;
+    }
+
     this.setState({ shopSaving: true, shopError: "", shopDone: "" });
     try {
       const result = await this.myShopService.upsert(shopDraft.toPayload(), {
         parcelQrFile: shopQrFile,
+        kycContext: {
+          directSave: canDirectSave,
+          citizenIdLocked: shopProfile.isCitizenIdLocked(),
+          hasApprovedKycHistory: shopProfile.hasApprovedKycHistory(),
+          hasPendingSubmission: shopProfile.hasPendingSubmission(),
+          qrCodeChanged: hasNewQrFile,
+          submissionType: canDirectSave
+            ? "profile_update"
+            : hasNewQrFile && shopProfile.hasApprovedKycHistory()
+              ? "qr_code_reverification"
+              : shopProfile.isRejectedKyc()
+                ? "resubmission_after_rejection"
+                : shopProfile.hasApprovedKycHistory()
+                  ? "shop_profile_update"
+                  : "initial_kyc",
+        },
       });
       const updatedShop = result?.shop ?? ShopProfile.empty();
 
       this.revokePreviewUrls([this.state.shopQrPreviewUrl].filter(Boolean));
       this.setState({
-        shopDraft: updatedShop,
+        shopProfile: updatedShop,
+        shopDraft: updatedShop.toEditableDraft(),
         shopQrFile: null,
         shopQrPreviewUrl: "",
-        shopDone: "บันทึกข้อมูลร้านและ QR code เรียบร้อย",
+        shopDone: result?.message ?? "อัปเดตข้อมูลร้านเรียบร้อย",
       });
     } catch (e) {
       this.setState({ shopError: e?.message ?? "บันทึกข้อมูลร้านไม่สำเร็จ" });
@@ -672,6 +730,7 @@ export class MyShopPage extends React.Component {
       error,
       done,
       products,
+      categories,
       showCreatePopup,
       showEditPopup,
       showDeleteConfirmPopup,
@@ -685,6 +744,7 @@ export class MyShopPage extends React.Component {
       editImageFiles,
       editImagePreviewUrls,
       shopLoading,
+      shopProfile,
       shopDraft,
       shopQrFile,
       shopQrPreviewUrl,
@@ -742,7 +802,7 @@ export class MyShopPage extends React.Component {
                 onClick={() => this.props.onGoChat?.()}
                 title="แชท"
               >
-                💬
+                <img src="/chat.svg" alt="แชท" className="h-5 w-5 object-contain" />
               </button>
 
               <button
@@ -751,7 +811,7 @@ export class MyShopPage extends React.Component {
                 onClick={this.openProfilePopup}
                 title="บัญชี"
               >
-                👤
+                <img src="/account.svg" alt="บัญชี" className="h-5 w-5 object-contain" />
               </button>
             </div>
           </div>
@@ -774,7 +834,8 @@ export class MyShopPage extends React.Component {
             </div>
 
             <ShopSettingsCard
-              shop={shopDraft}
+              shopMeta={shopProfile}
+              shopDraft={shopDraft}
               loading={shopLoading}
               saving={shopSaving}
               error={shopError}
@@ -807,6 +868,7 @@ export class MyShopPage extends React.Component {
 
         {showCreatePopup ? (
           <CreateProductModal
+            categories={categories}
             draftProduct={draftProduct}
             imageFiles={imageFiles}
             imagePreviewUrls={imagePreviewUrls}
@@ -821,6 +883,7 @@ export class MyShopPage extends React.Component {
 
         {showEditPopup ? (
           <EditProductModal
+            categories={categories}
             draftProduct={editDraftProduct}
             imageFiles={editImageFiles}
             imagePreviewUrls={editImagePreviewUrls}
@@ -883,10 +946,24 @@ export class MyShopPage extends React.Component {
   }
 }
 
+const getShopKycBadgeClassName = (status) => {
+  switch (`${status ?? ""}`.trim()) {
+    case "approved":
+      return "border-emerald-200 bg-emerald-50 text-emerald-700";
+    case "rejected":
+      return "border-red-200 bg-red-50 text-red-700";
+    case "pending":
+      return "border-amber-200 bg-amber-50 text-amber-700";
+    default:
+      return "border-zinc-200 bg-zinc-100 text-zinc-700";
+  }
+};
+
 class ShopSettingsCard extends React.Component {
   render() {
     const {
-      shop,
+      shopMeta,
+      shopDraft,
       loading,
       saving,
       error,
@@ -898,7 +975,29 @@ class ShopSettingsCard extends React.Component {
       onSave,
     } = this.props;
 
-    const qrImageUrl = qrPreviewUrl || shop?.parcelQrCodeUrl || "";
+    const qrImageUrl =
+      qrPreviewUrl ||
+      shopMeta?.getVisibleParcelQrCodeUrl?.() ||
+      shopDraft?.parcelQrCodeUrl ||
+      "";
+    const citizenIdLocked = shopMeta?.isCitizenIdLocked?.() ?? false;
+    const canDirectSave = shopMeta?.canDirectSave?.({ hasNewQrFile: Boolean(qrFile) }) ?? false;
+    const actionLabel = canDirectSave
+      ? "บันทึกข้อมูลร้าน"
+      : shopMeta?.hasPendingSubmission?.()
+        ? "ส่งตรวจสอบอีกครั้ง"
+        : "ส่งตรวจสอบ";
+
+    let statusNote = "เมื่อส่งตรวจสอบแล้ว Admin จะตรวจเลขบัตรประชาชนและ QR code ร้านก่อนบันทึกข้อมูลจริง";
+    if (shopMeta?.isPendingKyc?.()) {
+      statusNote = "ข้อมูลร้านชุดนี้ยังไม่ถูกบันทึกจริงจนกว่า Admin จะอนุมัติ KYC";
+    } else if (shopMeta?.isRejectedKyc?.() && shopMeta?.hasApprovedKycHistory?.()) {
+      statusNote = "คำขอ KYC ล่าสุดถูกปฏิเสธ ระบบยังใช้ข้อมูลร้านชุดที่เคยอนุมัติล่าสุดอยู่";
+    } else if (shopMeta?.isRejectedKyc?.()) {
+      statusNote = "ข้อมูลร้านยังไม่ถูกบันทึก สามารถแก้ไขแล้วส่งตรวจสอบใหม่ได้";
+    } else if (shopMeta?.hasApprovedKycHistory?.()) {
+      statusNote = "หลังอนุมัติแล้วจะแก้ไขข้อมูลร้านได้ ยกเว้นเลขบัตรประชาชน และถ้าเปลี่ยน QR code ต้องส่งตรวจสอบใหม่";
+    }
 
     return (
       <section className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 space-y-4">
@@ -906,17 +1005,38 @@ class ShopSettingsCard extends React.Component {
           <div>
             <div className="text-base font-semibold text-zinc-900">ข้อมูลร้านและการรับชำระ</div>
             <div className="text-sm text-zinc-500">
-              ใช้เป็นโครงสำหรับการส่งพัสดุ โดย popup ตะกร้าจะดึง QR code ของร้านจากส่วนนี้
+              Admin จะตรวจเลขบัตรประชาชนและ QR code ร้านก่อนเปิดใช้งานจริง
             </div>
           </div>
           <button
             type="button"
-            className="rounded-xl bg-zinc-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+            className="rounded-xl bg-[#F4D03E] px-4 py-2 text-sm font-semibold text-black disabled:opacity-60"
             onClick={onSave}
             disabled={saving || loading}
           >
-            {saving ? "กำลังบันทึก..." : "บันทึกข้อมูลร้าน"}
+            {saving ? "กำลังดำเนินการ..." : actionLabel}
           </button>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
+          <div className={`rounded-full border px-2.5 py-1 ${getShopKycBadgeClassName(shopMeta?.kycStatus)}`}>
+            สถานะ KYC: {shopMeta?.getKycStatusLabel?.() ?? "ยังไม่ส่งตรวจ"}
+          </div>
+          {shopMeta?.kycSubmittedAt ? (
+            <div className="rounded-full border border-zinc-200 bg-white px-2.5 py-1 text-zinc-600">
+              ส่งล่าสุด: {new Date(shopMeta.kycSubmittedAt).toLocaleString("th-TH")}
+            </div>
+          ) : null}
+          {shopMeta?.kycReviewedAt ? (
+            <div className="rounded-full border border-zinc-200 bg-white px-2.5 py-1 text-zinc-600">
+              ตรวจล่าสุด: {new Date(shopMeta.kycReviewedAt).toLocaleString("th-TH")}
+            </div>
+          ) : null}
+        </div>
+
+        <div className="rounded-2xl border border-zinc-200 bg-white px-3 py-3 text-sm text-zinc-600">
+          {statusNote}
+          {shopMeta?.moderationNote ? ` หมายเหตุจาก Admin: ${shopMeta.moderationNote}` : ""}
         </div>
 
         {loading ? <div className="text-sm text-zinc-500">กำลังโหลดข้อมูลร้าน...</div> : null}
@@ -928,30 +1048,38 @@ class ShopSettingsCard extends React.Component {
         ) : null}
 
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <label className="space-y-1">
               <div className="text-sm text-zinc-600">ชื่อร้าน</div>
               <input
                 className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none"
-                value={shop?.shopName ?? ""}
+                value={shopDraft?.shopName ?? ""}
                 onChange={(e) => onChangeField?.("shopName", e.target.value)}
               />
             </label>
 
             <label className="space-y-1">
-              <div className="text-sm text-zinc-600">ช่องทางติดต่อ</div>
+              <div className="text-sm text-zinc-600">เลขบัตรประชาชน</div>
               <input
-                className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none"
-                value={shop?.contact ?? ""}
-                onChange={(e) => onChangeField?.("contact", e.target.value)}
+                inputMode="numeric"
+                maxLength={13}
+                className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none disabled:bg-zinc-100"
+                value={shopDraft?.citizenId ?? ""}
+                disabled={citizenIdLocked}
+                onChange={(e) => onChangeField?.("citizenId", e.target.value)}
               />
+              <div className="text-xs text-zinc-500">
+                {citizenIdLocked
+                  ? "เลขบัตรประชาชนถูกล็อกหลังได้รับอนุมัติ KYC แล้ว"
+                  : "กรอกได้เฉพาะตัวเลข 13 หลัก"}
+              </div>
             </label>
 
             <label className="space-y-1 md:col-span-2">
               <div className="text-sm text-zinc-600">คำอธิบายร้าน</div>
               <textarea
                 className="min-h-24 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none"
-                value={shop?.description ?? ""}
+                value={shopDraft?.description ?? ""}
                 onChange={(e) => onChangeField?.("description", e.target.value)}
               />
             </label>
@@ -965,7 +1093,11 @@ class ShopSettingsCard extends React.Component {
                 onChange={(e) => onChangeQrFile?.(e.target.files?.[0] ?? null)}
               />
               <div className="text-xs text-zinc-500">
-                {qrFile ? `ไฟล์ใหม่: ${qrFile.name}` : "ถ้ายังไม่อัปโหลด ผู้ซื้อจะไม่สามารถเลือกส่งพัสดุได้"}
+                {qrFile
+                  ? `ไฟล์ใหม่: ${qrFile.name}`
+                  : canDirectSave
+                    ? "ถ้าต้องการเปลี่ยน QR code ร้าน จะต้องส่งตรวจสอบใหม่"
+                    : "ถ้ายังไม่อัปโหลด ผู้ซื้อจะยังไม่สามารถใช้ QR code ร้านนี้ได้"}
               </div>
             </label>
           </div>
@@ -1091,6 +1223,7 @@ class CreateProductModal extends React.Component {
 
   render() {
     const {
+      categories,
       draftProduct,
       imageFiles,
       imagePreviewUrls,
@@ -1142,7 +1275,7 @@ class CreateProductModal extends React.Component {
                 onChange={(e) => onChangeField?.("category", e.target.value)}
               >
                 <option value="">เลือกหมวดหมู่</option>
-                {ProductCategory.list().map((category) => (
+                {categories.map((category) => (
                   <option key={category} value={category}>
                     {category}
                   </option>
@@ -1220,7 +1353,7 @@ class CreateProductModal extends React.Component {
             </button>
             <button
               type="submit"
-              className="rounded-xl bg-zinc-900 text-white px-4 py-2 font-semibold disabled:opacity-60"
+              className="rounded-xl bg-[#F4D03E] px-4 py-2 font-semibold text-black disabled:opacity-60"
               disabled={saving}
             >
               {saving ? "กำลังลงขาย..." : "ลงขาย"}
@@ -1242,6 +1375,7 @@ class EditProductModal extends React.Component {
 
   render() {
     const {
+      categories,
       draftProduct,
       imageFiles,
       imagePreviewUrls,
@@ -1295,7 +1429,7 @@ class EditProductModal extends React.Component {
                 onChange={(e) => onChangeField?.("category", e.target.value)}
               >
                 <option value="">เลือกหมวดหมู่</option>
-                {ProductCategory.list().map((category) => (
+                {categories.map((category) => (
                   <option key={category} value={category}>
                     {category}
                   </option>

@@ -3,6 +3,7 @@ import { UserService } from "../services/UserService";
 import { MyShopService } from "../services/MyShopService";
 import { ProductCategory } from "../models/ProductCategory";
 import { CartService } from "../services/CartService";
+import { CategoryService } from "../services/CategoryService";
 import {
   CartPopup as HeaderCartPopup,
   ProfilePopup as HeaderProfilePopup,
@@ -27,6 +28,7 @@ export class HomePage extends React.Component {
     loadingProducts: true,
     productsError: "",
     products: [],
+    categories: ProductCategory.list(),
     searchKeyword: "",
     selectedCategory: ProductCategory.ALL,
   };
@@ -34,9 +36,10 @@ export class HomePage extends React.Component {
   userService = UserService.instance();
   myShopService = MyShopService.instance();
   cartService = CartService.instance();
+  categoryService = CategoryService.instance();
 
   async componentDidMount() {
-    await this.loadMarketplaceProducts();
+    await Promise.all([this.loadCategories(), this.loadMarketplaceProducts()]);
   }
 
   componentWillUnmount() {
@@ -91,6 +94,21 @@ export class HomePage extends React.Component {
       avatarPreviewUrl: "",
       error: "",
     });
+  };
+
+  loadCategories = async () => {
+    try {
+      const { categories } = await this.categoryService.listCategories();
+      this.setState((state) => ({
+        categories: categories ?? ProductCategory.list(),
+        selectedCategory:
+          state.selectedCategory === ProductCategory.ALL || (categories ?? []).includes(state.selectedCategory)
+            ? state.selectedCategory
+            : ProductCategory.ALL,
+      }));
+    } catch {
+      this.setState({ categories: ProductCategory.list() });
+    }
   };
 
   closeEditModal = () => {
@@ -308,6 +326,7 @@ export class HomePage extends React.Component {
       loadingProducts,
       productsError,
       searchKeyword,
+      categories,
       selectedCategory,
     } = this.state;
     const user = this.props.user ?? {};
@@ -344,7 +363,7 @@ export class HomePage extends React.Component {
               onClick={this.openCartPopup}
               title="ตะกร้า"
             >
-              🛒
+              <img src="/cart.svg" alt="ตะกร้า" className="h-5 w-5 object-contain" />
             </button>
 
             <button
@@ -352,7 +371,7 @@ export class HomePage extends React.Component {
               onClick={() => this.props.onGoChat?.()}
               title="แชท"
             >
-              💬
+              <img src="/chat.svg" alt="แชท" className="h-5 w-5 object-contain" />
             </button>
 
             <button
@@ -360,7 +379,7 @@ export class HomePage extends React.Component {
               onClick={this.openProfilePopup}
               title="บัญชี"
             >
-              👤
+              <img src="/account.svg" alt="บัญชี" className="h-5 w-5 object-contain" />
             </button>
           </div>
         </div>
@@ -368,6 +387,7 @@ export class HomePage extends React.Component {
         <div className="mx-auto max-w-375 px-4 py-6 space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-[15rem_minmax(0,1fr)] gap-6">
             <CategorySidebar
+              categories={categories}
               selectedCategory={selectedCategory}
               onSelectCategory={this.onCategoryChange}
             />
@@ -450,14 +470,14 @@ export class HomePage extends React.Component {
 
 class CategorySidebar extends React.Component {
   render() {
-    const { selectedCategory, onSelectCategory } = this.props;
-    const categories = ProductCategory.listWithAll();
+    const { categories, selectedCategory, onSelectCategory } = this.props;
+    const categoryOptions = [ProductCategory.ALL, ...(categories ?? [])];
 
     return (
       <aside className="rounded-2xl bg-white shadow p-3 md:p-4">
         <div className="text-sm font-semibold text-zinc-800 px-2 pb-2">หมวดหมู่</div>
         <div className="space-y-1">
-          {categories.map((category) => {
+          {categoryOptions.map((category) => {
             const active = category === selectedCategory;
             return (
               <button

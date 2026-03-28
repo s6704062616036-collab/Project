@@ -263,7 +263,7 @@ export class MyOrderShopOrder {
   getStatusLabel() {
     switch (this.getEffectiveStatus()) {
       case "pending_payment_verification":
-        return "รอตรวจสอบสลิป";
+        return this.parcelPayment?.getPendingReviewLabel?.() ?? "รอตรวจสอบสลิป";
       case "pending_seller_confirmation":
         return "รอยืนยันคำสั่งซื้อ";
       case "awaiting_parcel_pickup":
@@ -286,8 +286,9 @@ export class MyOrderShopOrder {
       case "confirmed":
       case "completed":
         return "ยืนยันแล้ว";
-      case "rejected":
       case "cancelled":
+        return "ยกเลิกคำสั่งซื้อ";
+      case "rejected":
         return "ถูกปฏิเสธ";
       default:
         return this.getEffectiveStatus() || "รอดำเนินการ";
@@ -402,6 +403,10 @@ export class MyOrder {
 
     if (shopOrderStatuses.some((status) => status === "rejected_by_buyer")) {
       return "rejected_by_buyer";
+    }
+
+    if (shopOrderStatuses.every((status) => status === "cancelled")) {
+      return "cancelled";
     }
 
     if (shopOrderStatuses.every((status) => status === "cancelled_by_seller")) {

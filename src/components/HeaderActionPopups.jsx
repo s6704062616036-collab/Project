@@ -1,4 +1,5 @@
 import React from "react";
+import { ParcelPaymentMethod } from "../models/ParcelPaymentMethod";
 import { ShippingMethod } from "../models/ShippingMethod";
 
 const formatCurrency = (value) =>
@@ -87,6 +88,8 @@ export class CartPopup extends React.Component {
         const currentDraft = state.shopDrafts?.[group.shopKey];
         nextShopDrafts[group.shopKey] = {
           shippingMethod: currentDraft?.shippingMethod ?? ShippingMethod.MEETUP,
+          parcelPaymentMethod:
+            currentDraft?.parcelPaymentMethod ?? ParcelPaymentMethod.QR_CODE,
           meetupLocation: currentDraft?.meetupLocation ?? "",
           receiptFile: currentDraft?.receiptFile ?? null,
           receiptPreviewUrl: currentDraft?.receiptPreviewUrl ?? "",
@@ -129,6 +132,12 @@ export class CartPopup extends React.Component {
     this.setShopDraft(shopKey, { meetupLocation });
   };
 
+  setParcelPaymentMethod = (shopKey, parcelPaymentMethod) => {
+    this.setShopDraft(shopKey, {
+      parcelPaymentMethod: ParcelPaymentMethod.normalize(parcelPaymentMethod),
+    });
+  };
+
   setReceiptFile = (shopKey, receiptFile) => {
     const previousPreviewUrl = this.state.shopDrafts?.[shopKey]?.receiptPreviewUrl ?? "";
     const nextReceiptFile = receiptFile ?? null;
@@ -154,8 +163,12 @@ export class CartPopup extends React.Component {
     for (const group of groups) {
       const draft = this.state.shopDrafts?.[group.shopKey] ?? {};
       const shippingMethod = ShippingMethod.normalize(draft.shippingMethod);
+      const parcelPaymentMethod = ParcelPaymentMethod.normalize(draft.parcelPaymentMethod);
       const meetupLocation = `${draft?.meetupLocation ?? ""}`.trim();
       const receiptFile = draft?.receiptFile ?? null;
+      const effectiveReceiptFile = ParcelPaymentMethod.requiresReceipt(parcelPaymentMethod)
+        ? receiptFile
+        : null;
 
       if (ShippingMethod.isMeetup(shippingMethod) && !meetupLocation) {
         this.setState({
@@ -164,14 +177,22 @@ export class CartPopup extends React.Component {
         return null;
       }
 
-      if (ShippingMethod.isParcel(shippingMethod) && !group.shopParcelQrCodeUrl) {
+      if (
+        ShippingMethod.isParcel(shippingMethod) &&
+        ParcelPaymentMethod.requiresSellerQrCode(parcelPaymentMethod) &&
+        !group.shopParcelQrCodeUrl
+      ) {
         this.setState({
           validationError: `ร้าน ${group.shopName} ยังไม่ได้ตั้งค่า QR code รับชำระ`,
         });
         return null;
       }
 
-      if (ShippingMethod.isParcel(shippingMethod) && !receiptFile) {
+      if (
+        ShippingMethod.isParcel(shippingMethod) &&
+        ParcelPaymentMethod.requiresReceipt(parcelPaymentMethod) &&
+        !effectiveReceiptFile
+      ) {
         this.setState({
           validationError: `กรุณาแนบใบเสร็จสำหรับร้าน ${group.shopName}`,
         });
@@ -191,8 +212,9 @@ export class CartPopup extends React.Component {
         shopName: group.shopName,
         itemIds: group.items.map((item) => item?.id ?? "").filter(Boolean),
         shippingMethod,
+        paymentMethod: ShippingMethod.isParcel(shippingMethod) ? parcelPaymentMethod : "",
         meetupLocation,
-        receiptFile,
+        receiptFile: effectiveReceiptFile,
         buyerShippingAddress: ShippingMethod.isParcel(shippingMethod)
           ? {
               name: buyerName,
@@ -270,6 +292,9 @@ export class CartPopup extends React.Component {
                 {shopGroups.map((group) => {
                   const shopDraft = shopDrafts?.[group.shopKey] ?? {};
                   const shippingMethod = ShippingMethod.normalize(shopDraft.shippingMethod);
+                  const parcelPaymentMethod = ParcelPaymentMethod.normalize(
+                    shopDraft?.parcelPaymentMethod,
+                  );
 
                   return (
                     <section key={group.shopKey} className="rounded-2xl border border-zinc-200 p-3 space-y-3">
@@ -381,7 +406,28 @@ export class CartPopup extends React.Component {
 
                       {ShippingMethod.isParcel(shippingMethod) ? (
                         <div className="space-y-3 rounded-2xl bg-zinc-50 p-3">
-                          <div className="text-sm font-medium text-zinc-800">ชำระเงินผ่าน QR code ร้านค้า</div>
+                          <div className="space-y-2">
+                            <div className="text-sm font-medium text-zinc-800">การชำระเงินสำหรับพัสดุ</div>
+                            <div className="grid gap-2 sm:grid-cols-2">
+                              {ParcelPaymentMethod.list().map((method) => {
+                                const active = parcelPaymentMethod === method;
+                                return (
+                                  <button
+                                    key={`${group.shopKey}-${method}`}
+                                    type="button"
+                                    className={`rounded-xl border px-3 py-2 text-sm font-semibold transition ${
+                                      active
+                                        ? "border-zinc-900 bg-zinc-900 text-white"
+                                        : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50"
+                                    }`}
+                                    onClick={() => this.setParcelPaymentMethod(group.shopKey, method)}
+                                  >
+                                    {ParcelPaymentMethod.getLabel(method)}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
 
                           <div className="rounded-2xl border border-zinc-200 bg-white p-3 space-y-1">
                             <div className="text-sm font-medium text-zinc-800">ที่อยู่จัดส่งของผู้ซื้อ</div>
@@ -393,40 +439,47 @@ export class CartPopup extends React.Component {
                             </div>
                           </div>
 
-                          {group.shopParcelQrCodeUrl ? (
-                            <div className="grid gap-3 sm:grid-cols-[7rem_minmax(0,1fr)] sm:items-start">
-                              <div className="aspect-square rounded-2xl border border-zinc-200 bg-white overflow-hidden">
-                                <img
-                                  src={group.shopParcelQrCodeUrl}
-                                  alt={`qr-${group.shopName}`}
-                                  className="h-full w-full object-contain"
-                                />
-                              </div>
-                              <div className="space-y-2">
-                                <div className="rounded-xl border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
-                                  ร้านนี้เปิดรับการชำระแบบ QR แล้ว หลังโอนเงินให้แนบใบเสร็จเพื่อส่งคำสั่งซื้อไปให้คนขายตรวจสอบ
-                                </div>
-                                <label className="space-y-1">
-                                  <div className="text-sm text-zinc-700">แนบรูปใบเสร็จ</div>
-                                  <input
-                                    type="file"
-                                    accept="image/*"
-                                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-100 file:px-3 file:py-1.5"
-                                    onChange={(e) => this.setReceiptFile(group.shopKey, e.target.files?.[0] ?? null)}
+                          {ParcelPaymentMethod.requiresSellerQrCode(parcelPaymentMethod) ? (
+                            group.shopParcelQrCodeUrl ? (
+                              <div className="grid gap-3 sm:grid-cols-[7rem_minmax(0,1fr)] sm:items-start">
+                                <div className="aspect-square rounded-2xl border border-zinc-200 bg-white overflow-hidden">
+                                  <img
+                                    src={group.shopParcelQrCodeUrl}
+                                    alt={`qr-${group.shopName}`}
+                                    className="h-full w-full object-contain"
                                   />
-                                </label>
-                                {shopDraft?.receiptFile ? (
-                                  <div className="text-xs text-zinc-500">{shopDraft.receiptFile.name}</div>
-                                ) : null}
+                                </div>
+                                <div className="space-y-2">
+                                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
+                                    ร้านนี้เปิดรับการชำระแบบ QR แล้ว หลังโอนเงินให้แนบใบเสร็จเพื่อส่งคำสั่งซื้อไปให้คนขายตรวจสอบ
+                                  </div>
+                                  <label className="space-y-1">
+                                    <div className="text-sm text-zinc-700">แนบรูปใบเสร็จ</div>
+                                    <input
+                                      type="file"
+                                      accept="image/*"
+                                      className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-100 file:px-3 file:py-1.5"
+                                      onChange={(e) => this.setReceiptFile(group.shopKey, e.target.files?.[0] ?? null)}
+                                    />
+                                  </label>
+                                  {shopDraft?.receiptFile ? (
+                                    <div className="text-xs text-zinc-500">{shopDraft.receiptFile.name}</div>
+                                  ) : null}
+                                </div>
                               </div>
-                            </div>
+                            ) : (
+                              <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                                ร้านนี้ยังไม่ได้อัปโหลด QR code รับชำระ จึงยังไม่สามารถเลือกส่งพัสดุได้
+                              </div>
+                            )
                           ) : (
-                            <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-                              ร้านนี้ยังไม่ได้อัปโหลด QR code รับชำระ จึงยังไม่สามารถเลือกส่งพัสดุได้
+                            <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm text-sky-800">
+                              {ParcelPaymentMethod.getDescription(parcelPaymentMethod)}
                             </div>
                           )}
 
-                          {shopDraft?.receiptPreviewUrl ? (
+                          {shopDraft?.receiptPreviewUrl &&
+                          ParcelPaymentMethod.requiresReceipt(parcelPaymentMethod) ? (
                             <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white">
                               <img
                                 src={shopDraft.receiptPreviewUrl}
@@ -454,7 +507,7 @@ export class CartPopup extends React.Component {
             <div className="flex justify-end">
               <button
                 type="button"
-                className="rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+                className="rounded-xl bg-[#F4D03E] px-4 py-2.5 text-sm font-semibold text-black disabled:opacity-50"
                 disabled={checkingOut || !items?.length}
                 onClick={this.submitCheckout}
               >
@@ -480,8 +533,8 @@ export class ProfilePopup extends React.Component {
       onGoMyOrders,
       onLogout,
       showGoMyShopButton = true,
-      goMyShopButtonClassName = "w-full rounded-xl bg-zinc-900 text-white px-3 py-2.5 text-sm font-semibold",
-      goMyOrdersButtonClassName = "w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-sm font-semibold text-zinc-700 hover:bg-zinc-50",
+      goMyShopButtonClassName = "w-full rounded-xl bg-[#F4D03E] px-3 py-2.5 text-sm font-semibold text-black",
+      goMyOrdersButtonClassName = "w-full rounded-xl bg-[#F4D03E] px-3 py-2.5 text-sm font-semibold text-black",
     } = this.props;
 
     return (

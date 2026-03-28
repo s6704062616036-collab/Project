@@ -273,6 +273,7 @@ export class ChatPage extends React.Component {
     const userId = this.props.user?.id ?? "";
     const activeChat = this.getActiveChat();
     const canSellerRespondMeetupProposal = safeText(activeChat?.ownerId) === safeText(userId);
+    const canBuyerRespondMeetupProposal = Boolean(activeChat) && !canSellerRespondMeetupProposal;
 
     if (!activeChat) {
       return (
@@ -319,6 +320,7 @@ export class ChatPage extends React.Component {
                 message={message}
                 mine={message.isMine(userId)}
                 canSellerRespondMeetupProposal={canSellerRespondMeetupProposal}
+                canBuyerRespondMeetupProposal={canBuyerRespondMeetupProposal}
                 onRespondMeetupProposal={this.respondMeetupProposal}
                 responding={proposalActionLoadingId === message.id}
                 actionError={
@@ -397,7 +399,7 @@ export class ChatPage extends React.Component {
                 className="h-20 w-20 rounded-xl object-cover"
               />
             </button>
-            <div className="font-semibold">สินค้าที่ลงขาย</div>
+            <div className="font-semibold text-2xl gap-10">แชท</div>
           </div>
         </div>
 
@@ -454,6 +456,7 @@ class MessageBubble extends React.Component {
       message,
       mine,
       canSellerRespondMeetupProposal,
+      canBuyerRespondMeetupProposal,
       onRespondMeetupProposal,
       responding,
       actionError,
@@ -466,6 +469,7 @@ class MessageBubble extends React.Component {
             message={message}
             mine={mine}
             canSellerRespond={canSellerRespondMeetupProposal}
+            canBuyerRespond={canBuyerRespondMeetupProposal}
             onRespond={onRespondMeetupProposal}
             responding={responding}
             error={actionError}
@@ -561,7 +565,7 @@ class MeetupProposalCard extends React.Component {
         ? "border-emerald-200 bg-emerald-50 text-emerald-700"
         : status === "countered_by_seller"
           ? "border-sky-200 bg-sky-50 text-sky-700"
-          : status === "cancelled_by_seller"
+          : status === "cancelled_by_seller" || status === "rejected_by_buyer"
             ? "border-red-200 bg-red-50 text-red-700"
             : "border-amber-200 bg-amber-50 text-amber-700";
 
@@ -569,12 +573,14 @@ class MeetupProposalCard extends React.Component {
   }
 
   render() {
-    const { message, mine, canSellerRespond, responding, error } = this.props;
+    const { message, mine, canSellerRespond, canBuyerRespond, responding, error } = this.props;
     const { editingCounterLocation, counterLocation } = this.state;
     const proposalStatus = message?.getMeetupProposalStatus?.() ?? "";
     const proposalLocation = message?.meetupProposal?.location ?? "";
     const responseLocation = message?.meetupProposal?.responseLocation ?? "";
-    const canAct = canSellerRespond && proposalStatus === "pending_seller_response";
+    const canSellerAct = canSellerRespond && proposalStatus === "pending_seller_response";
+    const canBuyerAct = canBuyerRespond && proposalStatus === "countered_by_seller";
+    const canAct = canSellerAct || canBuyerAct;
 
     return (
       <div
@@ -607,19 +613,27 @@ class MeetupProposalCard extends React.Component {
 
         {proposalStatus === "awaiting_meetup" ? (
           <div className={`text-xs ${mine ? "text-zinc-300" : "text-zinc-500"}`}>
-            คนขายยอมรับข้อเสนอแล้ว สถานะตอนนี้คือรอนัดพบ
+            ยืนยันสถานที่นัดรับเรียบร้อยแล้ว สถานะตอนนี้คือรอนัดพบ
           </div>
         ) : null}
 
         {proposalStatus === "countered_by_seller" ? (
           <div className={`text-xs ${mine ? "text-zinc-300" : "text-zinc-500"}`}>
-            คนขายได้เสนอเปลี่ยนสถานที่นัดรับแล้ว สามารถคุยรายละเอียดต่อในแชทนี้ได้
+            {canBuyerRespond
+              ? "คนขายได้เสนอเปลี่ยนสถานที่นัดรับแล้ว กรุณายืนยันสถานที่ เปลี่ยนสถานที่ หรือยกเลิกคำสั่งซื้อ"
+              : "คนขายได้เสนอเปลี่ยนสถานที่นัดรับแล้ว สามารถคุยรายละเอียดต่อในแชทนี้ได้"}
           </div>
         ) : null}
 
         {proposalStatus === "cancelled_by_seller" ? (
           <div className={`text-xs ${mine ? "text-zinc-300" : "text-zinc-500"}`}>
             คนขายยกเลิกการนัดรับแล้ว หากต้องการดำเนินการต่อให้คุยรายละเอียดใหม่ในแชท
+          </div>
+        ) : null}
+
+        {proposalStatus === "rejected_by_buyer" ? (
+          <div className={`text-xs ${mine ? "text-zinc-300" : "text-zinc-500"}`}>
+            ผู้ซื้อยกเลิกคำสั่งซื้อนี้แล้ว
           </div>
         ) : null}
 
@@ -633,7 +647,7 @@ class MeetupProposalCard extends React.Component {
                   onClick={() => this.submitAction("accept")}
                   disabled={responding}
                 >
-                  ยอมรับข้อเสนอ
+                  {canBuyerAct ? "ยืนยันสถานที่นัดรับ" : "ยอมรับข้อเสนอ"}
                 </button>
                 <button
                   type="button"
@@ -643,7 +657,7 @@ class MeetupProposalCard extends React.Component {
                   onClick={this.openCounterEditor}
                   disabled={responding}
                 >
-                  เปลี่ยนสถานที่รับและส่ง
+                  {canBuyerAct ? "เปลี่ยนสถานที่" : "เปลี่ยนสถานที่รับและส่ง"}
                 </button>
                 <button
                   type="button"
@@ -651,7 +665,7 @@ class MeetupProposalCard extends React.Component {
                   onClick={() => this.submitAction("cancel")}
                   disabled={responding}
                 >
-                  ยกเลิกการนัดรับ
+                  {canBuyerAct ? "ยกเลิกการสั่งซื้อ" : "ยกเลิกการนัดรับ"}
                 </button>
               </div>
             ) : (

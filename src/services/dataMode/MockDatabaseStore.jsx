@@ -1,5 +1,7 @@
 import { ProductSaleLifecycle } from "../../models/ProductSaleLifecycle";
+import { ParcelPaymentMethod } from "../../models/ParcelPaymentMethod";
 import { ProductSaleSyncRequest } from "../../models/ProductSaleSyncRequest";
+import { ProductCategory } from "../../models/ProductCategory";
 import { ShippingMethod } from "../../models/ShippingMethod";
 
 const MOCK_DB_STORAGE_KEY = "myweb:mock-db:v1";
@@ -90,19 +92,62 @@ const tryParseJson = (value, fallback = null) => {
   }
 };
 
+const normalizeShopKycSubmissionRecord = (input = {}) => {
+  const submission = input && typeof input === "object" ? input : {};
+  const normalized = {
+    shopName: safeText(submission.shopName),
+    description: safeText(submission.description),
+    citizenId: toDigits(submission.citizenId).slice(0, 13),
+    parcelQrCodeUrl: normalizeImageUrl(
+      submission.parcelQrCodeUrl ??
+        submission.paymentQrCodeUrl ??
+        submission.parcelPaymentQrCodeUrl ??
+        submission.qrCodeUrl,
+      "product",
+    ),
+    submittedAt: safeText(submission.submittedAt),
+  };
+
+  return Object.values(normalized).some(Boolean) ? normalized : null;
+};
+
 const normalizeShopProfileRecord = (shopInput = {}) => {
   const shop = shopInput && typeof shopInput === "object" ? shopInput : {};
+  const citizenIdInput =
+    shop.citizenId ??
+    (toDigits(shop.contact).length === 13 ? shop.contact : "");
+  const pendingSubmission = normalizeShopKycSubmissionRecord(
+    shop.pendingSubmission ?? shop.pendingKycSubmission ?? shop.kycSubmission,
+  );
+  const normalizedCitizenId = toDigits(citizenIdInput).slice(0, 13);
+  const normalizedParcelQrCodeUrl = normalizeImageUrl(
+    shop.parcelQrCodeUrl ?? shop.paymentQrCodeUrl ?? shop.parcelPaymentQrCodeUrl ?? shop.qrCodeUrl,
+    "product",
+  );
+  const hasApprovedSeedData = Boolean(
+    safeText(shop.kycApprovedAt ?? shop.approvedAt) ||
+      (normalizedCitizenId && normalizedParcelQrCodeUrl),
+  );
+  const normalizedKycStatus =
+    safeText(shop.kycStatus) ||
+    (pendingSubmission ? "pending" : hasApprovedSeedData ? "approved" : "unsubmitted");
+
   return {
     id: safeText(shop.id ?? shop._id) || createId("shop"),
     ownerId: safeText(shop.ownerId),
     shopName: safeText(shop.shopName),
     description: safeText(shop.description),
-    contact: safeText(shop.contact),
+    citizenId: normalizedCitizenId,
     avatarUrl: normalizeImageUrl(shop.avatarUrl, "avatar"),
-    parcelQrCodeUrl: normalizeImageUrl(
-      shop.parcelQrCodeUrl ?? shop.paymentQrCodeUrl ?? shop.parcelPaymentQrCodeUrl ?? shop.qrCodeUrl,
-      "product",
-    ),
+    parcelQrCodeUrl: normalizedParcelQrCodeUrl,
+    kycStatus: ["approved", "pending", "rejected", "unsubmitted"].includes(normalizedKycStatus)
+      ? normalizedKycStatus
+      : "unsubmitted",
+    kycSubmittedAt: safeText(shop.kycSubmittedAt ?? pendingSubmission?.submittedAt),
+    kycReviewedAt: safeText(shop.kycReviewedAt ?? shop.reviewedAt),
+    kycApprovedAt: safeText(shop.kycApprovedAt ?? shop.approvedAt),
+    moderationNote: safeText(shop.moderationNote ?? shop.note),
+    pendingSubmission,
   };
 };
 
@@ -140,6 +185,9 @@ const normalizeProductRecord = (productInput = {}) => {
     saleStatus,
     soldAt: safeText(product.soldAt),
     soldOrderId: safeText(product.soldOrderId ?? product.orderId),
+    moderationStatus: safeText(product.moderationStatus) || "active",
+    moderationNote: safeText(product.moderationNote),
+    hiddenAt: safeText(product.hiddenAt),
     createdAt: safeText(product.createdAt) || nowIso(),
   };
 };
@@ -149,11 +197,83 @@ const normalizeUserRecord = (userInput = {}) => {
   return {
     id: safeText(user.id ?? user._id) || createId("user"),
     name: safeText(user.name),
+    username: toLower(user.username),
     email: toLower(user.email),
     password: `${user.password ?? ""}`,
     avatarUrl: normalizeImageUrl(user.avatarUrl, "avatar") || DEFAULT_AVATAR_URL,
     phone: safeText(user.phone),
     address: safeText(user.address),
+    role: safeText(user.role) || "user",
+    kycStatus: safeText(user.kycStatus) || "pending",
+    banStatus: safeText(user.banStatus) || "active",
+    kycDocumentUrl: normalizeImageUrl(user.kycDocumentUrl, "product"),
+    moderationNote: safeText(user.moderationNote),
+    reviewedAt: safeText(user.reviewedAt),
+    createdAt: safeText(user.createdAt) || nowIso(),
+    lastLoginAt: safeText(user.lastLoginAt),
+  };
+};
+
+const ensureAdminSeedUser = (usersInput = [], seedUsersInput = []) => {
+  const users = ensureArray(usersInput).map((user) => normalizeUserRecord(user));
+  const seedAdminUser = ensureArray(seedUsersInput)
+    .map((user) => normalizeUserRecord(user))
+    .find((user) => safeText(user?.id) === "user_admin");
+
+  if (!seedAdminUser) return users;
+
+  const existingAdminIndex = users.findIndex((user) =>
+    safeText(user?.id) === safeText(seedAdminUser.id) ||
+    toLower(user?.username) === toLower(seedAdminUser.username) ||
+    toLower(user?.email) === toLower(seedAdminUser.email) ||
+    toLower(user?.role) === "admin",
+  );
+
+  if (existingAdminIndex === -1) {
+    return [seedAdminUser, ...users];
+  }
+
+  const existingAdminUser = users[existingAdminIndex];
+  users[existingAdminIndex] = normalizeUserRecord({
+    ...existingAdminUser,
+    ...seedAdminUser,
+    lastLoginAt: existingAdminUser?.lastLoginAt ?? seedAdminUser.lastLoginAt,
+  });
+  return users;
+};
+
+const normalizeCategoryRecord = (categoryInput = {}) => {
+  const category = categoryInput && typeof categoryInput === "object" ? categoryInput : {};
+  return {
+    id: safeText(category.id ?? category._id) || createId("category"),
+    name: safeText(category.name),
+    description: safeText(category.description),
+    createdAt: safeText(category.createdAt) || nowIso(),
+    updatedAt: safeText(category.updatedAt) || nowIso(),
+  };
+};
+
+const normalizeAdminProductReportRecord = (reportInput = {}) => {
+  const report = reportInput && typeof reportInput === "object" ? reportInput : {};
+  return {
+    id: safeText(report.id ?? report._id) || createId("admin_product_report"),
+    reportType: safeText(report.reportType ?? report.type ?? report.targetType) || "product",
+    productId: safeText(report.productId),
+    productOwnerId: safeText(report.productOwnerId ?? report.ownerId),
+    productName: safeText(report.productName),
+    productCategory: safeText(report.productCategory),
+    productImageUrl: normalizeImageUrl(report.productImageUrl, "product"),
+    shopId: safeText(report.shopId),
+    shopOwnerId: safeText(report.shopOwnerId ?? report.ownerId),
+    shopName: safeText(report.shopName),
+    shopAvatarUrl: normalizeImageUrl(report.shopAvatarUrl, "avatar"),
+    reporterId: safeText(report.reporterId),
+    reason: safeText(report.reason),
+    status: safeText(report.status) || "open",
+    createdAt: safeText(report.createdAt) || nowIso(),
+    resolvedAt: safeText(report.resolvedAt),
+    resolvedBy: safeText(report.resolvedBy),
+    resolutionNote: safeText(report.resolutionNote),
   };
 };
 
@@ -256,37 +376,100 @@ const normalizeChatRecord = (chatInput = {}) => {
 };
 
 const createSeedState = () => {
+  const adminUserId = "user_admin";
   const demoUserId = "user_demo";
   const ownerUserId = "user_owner";
+  const pendingUserId = "user_pending";
+  const flaggedUserId = "user_flagged";
   const now = Date.now();
   const seededChatCreatedAt = new Date(now - 1000 * 60 * 70).toISOString();
   const seededMessageBuyerAt = new Date(now - 1000 * 60 * 35).toISOString();
   const seededMessageSellerAt = new Date(now - 1000 * 60 * 20).toISOString();
   const seededMessageImageAt = new Date(now - 1000 * 60 * 10).toISOString();
+  const defaultCategories = ProductCategory.defaultList();
 
   return {
     users: [
       {
+        id: adminUserId,
+        name: "ผู้ดูแลระบบ",
+        username: "admin",
+        email: "admin@myweb.local",
+        password: "admin123",
+        avatarUrl: `${DEFAULT_AVATAR_URL}?admin=1`,
+        phone: "0800000000",
+        address: "Bangkok HQ",
+        role: "admin",
+        kycStatus: "approved",
+        banStatus: "active",
+        kycDocumentUrl: `${DEFAULT_PRODUCT_IMAGE_URL}?seed=kyc-admin`,
+        createdAt: new Date(now - 1000 * 60 * 60 * 24 * 2).toISOString(),
+      },
+      {
         id: demoUserId,
         name: "ผู้ใช้ทดสอบ",
+        username: "demo",
         email: "demo@myweb.local",
         password: "123456",
         avatarUrl: DEFAULT_AVATAR_URL,
         phone: "0812345678",
         address: "กรุงเทพมหานคร",
+        role: "user",
+        kycStatus: "approved",
+        banStatus: "active",
+        kycDocumentUrl: `${DEFAULT_PRODUCT_IMAGE_URL}?seed=kyc-demo`,
+        createdAt: new Date(now - 1000 * 60 * 60 * 24 * 4).toISOString(),
       },
       {
         id: ownerUserId,
         name: "ร้านตัวอย่าง",
+        username: "seller",
         email: "seller@myweb.local",
         password: "123456",
         avatarUrl: `${DEFAULT_AVATAR_URL}?owner=1`,
         phone: "0899999999",
         address: "เชียงใหม่",
+        role: "user",
+        kycStatus: "approved",
+        banStatus: "active",
+        kycDocumentUrl: `${DEFAULT_PRODUCT_IMAGE_URL}?seed=kyc-seller`,
+        createdAt: new Date(now - 1000 * 60 * 60 * 24 * 3).toISOString(),
+      },
+      {
+        id: pendingUserId,
+        name: "สมาชิกใหม่รอตรวจสอบ",
+        username: "newmember",
+        email: "newmember@myweb.local",
+        password: "123456",
+        avatarUrl: `${DEFAULT_AVATAR_URL}?pending=1`,
+        phone: "0822222222",
+        address: "นนทบุรี",
+        role: "user",
+        kycStatus: "pending",
+        banStatus: "active",
+        kycDocumentUrl: `${DEFAULT_PRODUCT_IMAGE_URL}?seed=kyc-pending`,
+        createdAt: new Date(now - 1000 * 60 * 60 * 18).toISOString(),
+      },
+      {
+        id: flaggedUserId,
+        name: "สมาชิกถูกรายงาน",
+        username: "flagged",
+        email: "flagged@myweb.local",
+        password: "123456",
+        avatarUrl: `${DEFAULT_AVATAR_URL}?flagged=1`,
+        phone: "0833333333",
+        address: "ภูเก็ต",
+        role: "user",
+        kycStatus: "rejected",
+        banStatus: "active",
+        kycDocumentUrl: `${DEFAULT_PRODUCT_IMAGE_URL}?seed=kyc-flagged`,
+        moderationNote: "เอกสารไม่ครบถ้วน",
+        reviewedAt: new Date(now - 1000 * 60 * 60 * 6).toISOString(),
+        createdAt: new Date(now - 1000 * 60 * 60 * 24 * 6).toISOString(),
       },
     ],
     session: {
-      userId: demoUserId,
+      userId: "",
     },
     shopProfiles: [
       {
@@ -294,18 +477,63 @@ const createSeedState = () => {
         ownerId: demoUserId,
         shopName: "ร้านผู้ใช้ทดสอบ",
         description: "ร้านทดลองสำหรับทดสอบระบบแบบไม่ใช้ฐานข้อมูล",
-        contact: "Line: demo-shop",
         avatarUrl: DEFAULT_AVATAR_URL,
+        citizenId: "",
         parcelQrCodeUrl: "",
+        kycStatus: "unsubmitted",
+        kycSubmittedAt: "",
+        kycReviewedAt: "",
+        kycApprovedAt: "",
+        moderationNote: "",
       },
       {
         id: "shop_owner",
         ownerId: ownerUserId,
         shopName: "ร้านตัวอย่าง",
         description: "สินค้าเดโม่สำหรับทดสอบหน้า home และ search",
-        contact: "Line: seller-shop",
         avatarUrl: `${DEFAULT_AVATAR_URL}?shop=owner`,
+        citizenId: "1101700203451",
         parcelQrCodeUrl: `${DEFAULT_PRODUCT_IMAGE_URL}?seed=shop-owner-qr`,
+        kycStatus: "approved",
+        kycSubmittedAt: new Date(now - 1000 * 60 * 60 * 48).toISOString(),
+        kycReviewedAt: new Date(now - 1000 * 60 * 60 * 46).toISOString(),
+        kycApprovedAt: new Date(now - 1000 * 60 * 60 * 46).toISOString(),
+        moderationNote: "",
+      },
+      {
+        id: "shop_pending",
+        ownerId: pendingUserId,
+        shopName: "",
+        description: "",
+        avatarUrl: `${DEFAULT_AVATAR_URL}?shop=pending`,
+        citizenId: "",
+        parcelQrCodeUrl: "",
+        kycStatus: "pending",
+        kycSubmittedAt: new Date(now - 1000 * 60 * 90).toISOString(),
+        kycReviewedAt: "",
+        kycApprovedAt: "",
+        moderationNote: "",
+        pendingSubmission: {
+          shopName: "ร้านรออนุมัติ KYC",
+          description: "กำลังรอผู้ดูแลระบบตรวจสอบเลขบัตรและ QR code ร้าน",
+          citizenId: "1101700203452",
+          parcelQrCodeUrl: `${DEFAULT_PRODUCT_IMAGE_URL}?seed=shop-pending-qr`,
+          submittedAt: new Date(now - 1000 * 60 * 90).toISOString(),
+        },
+      },
+      {
+        id: "shop_flagged",
+        ownerId: flaggedUserId,
+        shopName: "",
+        description: "",
+        avatarUrl: `${DEFAULT_AVATAR_URL}?shop=flagged`,
+        citizenId: "",
+        parcelQrCodeUrl: "",
+        kycStatus: "rejected",
+        kycSubmittedAt: new Date(now - 1000 * 60 * 60 * 8).toISOString(),
+        kycReviewedAt: new Date(now - 1000 * 60 * 60 * 6).toISOString(),
+        kycApprovedAt: "",
+        moderationNote: "เลขบัตรประชาชนหรือ QR code ไม่ถูกต้อง",
       },
     ],
     products: [
@@ -397,6 +625,56 @@ const createSeedState = () => {
     ],
     orders: [],
     adminReports: [],
+    adminCategories: defaultCategories.map((name, index) => ({
+      id: `category_${index + 1}`,
+      name,
+      description: `หมวดหลักของสินค้า: ${name}`,
+      createdAt: new Date(now - 1000 * 60 * 60 * 24 * (index + 1)).toISOString(),
+      updatedAt: new Date(now - 1000 * 60 * 60 * 24 * (index + 1)).toISOString(),
+    })),
+    adminProductReports: [
+      {
+        id: "product_report_01",
+        reportType: "product",
+        productId: "product_02",
+        productOwnerId: ownerUserId,
+        productName: "พัดลมตั้งโต๊ะ",
+        productCategory: "เครื่องใช้ไฟฟ้า",
+        productImageUrl: `${DEFAULT_AVATAR_URL}?seed=fan`,
+        reporterId: pendingUserId,
+        reason: "ผู้ใช้แจ้งว่าสินค้าอาจเข้าข่ายผิดกฎของแพลตฟอร์ม",
+        status: "open",
+        createdAt: new Date(now - 1000 * 60 * 75).toISOString(),
+      },
+      {
+        id: "product_report_02",
+        reportType: "product",
+        productId: "product_04",
+        productOwnerId: ownerUserId,
+        productName: "สร้อยคอเงิน",
+        productCategory: "เครื่องประดับ",
+        productImageUrl: `${DEFAULT_AVATAR_URL}?seed=necklace`,
+        reporterId: demoUserId,
+        reason: "ประกาศมีรายละเอียดไม่ครบ",
+        status: "dismissed",
+        createdAt: new Date(now - 1000 * 60 * 200).toISOString(),
+        resolvedAt: new Date(now - 1000 * 60 * 150).toISOString(),
+        resolutionNote: "ตรวจสอบแล้วไม่พบการละเมิดกฎ",
+      },
+      {
+        id: "shop_report_01",
+        reportType: "shop",
+        shopId: "shop_owner",
+        shopOwnerId: ownerUserId,
+        shopName: "ร้านตัวอย่าง",
+        shopAvatarUrl: `${DEFAULT_AVATAR_URL}?shop=owner`,
+        reporterId: demoUserId,
+        reason: "ร้านค้าส่งข้อความไม่เหมาะสมและตอบกลับล่าช้า",
+        status: "open",
+        createdAt: new Date(now - 1000 * 60 * 40).toISOString(),
+      },
+    ],
+    sellerNotifications: [],
     chats: [
       {
         id: "chat_seed_01",
@@ -456,9 +734,10 @@ export class MockDatabaseStore {
   #normalizeState(inputState) {
     const seed = createSeedState();
     const state = inputState && typeof inputState === "object" ? inputState : {};
+    const users = ensureAdminSeedUser(Array.isArray(state.users) ? state.users : seed.users, seed.users);
 
     return {
-      users: (Array.isArray(state.users) ? state.users : seed.users).map((user) => normalizeUserRecord(user)),
+      users,
       session: state.session && typeof state.session === "object" ? state.session : seed.session,
       shopProfiles: (Array.isArray(state.shopProfiles) ? state.shopProfiles : seed.shopProfiles).map((shop) =>
         normalizeShopProfileRecord(shop),
@@ -471,6 +750,15 @@ export class MockDatabaseStore {
       adminReports: (Array.isArray(state.adminReports) ? state.adminReports : seed.adminReports).map((report) =>
         normalizeAdminReportRecord(report),
       ),
+      adminCategories: (Array.isArray(state.adminCategories) ? state.adminCategories : seed.adminCategories).map((category) =>
+        normalizeCategoryRecord(category),
+      ),
+      adminProductReports: (Array.isArray(state.adminProductReports) ? state.adminProductReports : seed.adminProductReports).map((report) =>
+        normalizeAdminProductReportRecord(report),
+      ),
+      sellerNotifications: Array.isArray(state.sellerNotifications)
+        ? state.sellerNotifications
+        : seed.sellerNotifications,
       chats: (Array.isArray(state.chats) ? state.chats : seed.chats).map((chat) =>
         normalizeChatRecord(chat),
       ),
@@ -525,10 +813,15 @@ export class MockDatabaseStore {
     return {
       id: userRecord.id ?? "",
       name: userRecord.name ?? "",
+      username: userRecord.username ?? "",
       email: userRecord.email ?? "",
       avatarUrl: userRecord.avatarUrl ?? "",
       phone: userRecord.phone ?? "",
       address: userRecord.address ?? "",
+      role: userRecord.role ?? "user",
+      kycStatus: userRecord.kycStatus ?? "pending",
+      banStatus: userRecord.banStatus ?? "active",
+      createdAt: userRecord.createdAt ?? "",
     };
   }
 
@@ -543,8 +836,9 @@ export class MockDatabaseStore {
     return (
       this.state.users.find((user) => {
         const emailMatch = toLower(user.email) === normalizedIdentifier;
+        const usernameMatch = toLower(user.username) === normalizedIdentifier && Boolean(normalizedIdentifier);
         const phoneMatch = toDigits(user.phone) === digitIdentifier && digitIdentifier.length >= 8;
-        return emailMatch || phoneMatch;
+        return emailMatch || usernameMatch || phoneMatch;
       }) ?? null
     );
   }
@@ -560,6 +854,19 @@ export class MockDatabaseStore {
     if (!user) {
       throw new Error("กรุณาเข้าสู่ระบบก่อนใช้งาน");
     }
+    if (safeText(user?.banStatus) === "banned" && safeText(user?.role) !== "admin") {
+      this.state.session = { userId: "" };
+      this.#persist();
+      throw new Error("บัญชีนี้ถูกระงับการใช้งาน");
+    }
+    return user;
+  }
+
+  #requireAdminUser() {
+    const user = this.#requireCurrentUser();
+    if (safeText(user?.role) !== "admin") {
+      throw new Error("เฉพาะผู้ดูแลระบบเท่านั้น");
+    }
     return user;
   }
 
@@ -572,9 +879,15 @@ export class MockDatabaseStore {
       ownerId,
       shopName: "",
       description: "",
-      contact: "",
+      citizenId: "",
       avatarUrl: "",
       parcelQrCodeUrl: "",
+      kycStatus: "unsubmitted",
+      kycSubmittedAt: "",
+      kycReviewedAt: "",
+      kycApprovedAt: "",
+      moderationNote: "",
+      pendingSubmission: null,
     };
     this.state.shopProfiles.push(created);
     this.#persist();
@@ -590,6 +903,162 @@ export class MockDatabaseStore {
   #toShopResponse(shopRecord) {
     if (!shopRecord) return null;
     return normalizeShopProfileRecord(shopRecord);
+  }
+
+  #toPublicShopResponseByOwnerId(ownerId) {
+    const normalizedOwnerId = safeText(ownerId);
+    if (!normalizedOwnerId) return null;
+
+    const shopRecord = this.#findShopProfileByOwnerId(normalizedOwnerId);
+    const ownerRecord = this.#findUserById(normalizedOwnerId);
+    if (!shopRecord && !ownerRecord) return null;
+
+    return {
+      id: safeText(shopRecord?.id) || `shop_public_${normalizedOwnerId}`,
+      ownerId: normalizedOwnerId,
+      shopName: safeText(shopRecord?.shopName) || safeText(ownerRecord?.name) || "ร้านค้าผู้ขาย",
+      description: safeText(shopRecord?.description),
+      avatarUrl: normalizeImageUrl(shopRecord?.avatarUrl ?? ownerRecord?.avatarUrl, "avatar"),
+    };
+  }
+
+  #findCategoryById(categoryId) {
+    const normalizedId = safeText(categoryId);
+    if (!normalizedId) return null;
+    return this.state.adminCategories.find((category) => safeText(category?.id) === normalizedId) ?? null;
+  }
+
+  #findAdminProductReportById(reportId) {
+    const normalizedId = safeText(reportId);
+    if (!normalizedId) return null;
+    return this.state.adminProductReports.find((report) => safeText(report?.id) === normalizedId) ?? null;
+  }
+
+  #toAdminMemberResponse(userRecord) {
+    if (!userRecord) return null;
+    const shopRecord = this.#findShopProfileByOwnerId(userRecord.id);
+    const pendingSubmission = shopRecord?.pendingSubmission ?? null;
+    const effectiveShopName = pendingSubmission?.shopName ?? shopRecord?.shopName ?? "";
+    const effectiveShopDescription = pendingSubmission?.description ?? shopRecord?.description ?? "";
+    const effectiveCitizenId = pendingSubmission?.citizenId ?? shopRecord?.citizenId ?? "";
+    const effectiveKycQrCodeUrl =
+      pendingSubmission?.parcelQrCodeUrl ??
+      shopRecord?.parcelQrCodeUrl ??
+      userRecord.kycDocumentUrl ??
+      "";
+    const effectiveKycStatus =
+      safeText(shopRecord?.kycStatus) && safeText(shopRecord?.kycStatus) !== "unsubmitted"
+        ? safeText(shopRecord.kycStatus)
+        : userRecord.kycStatus ?? "pending";
+
+    return {
+      id: userRecord.id ?? "",
+      name: userRecord.name ?? "",
+      email: userRecord.email ?? "",
+      phone: userRecord.phone ?? "",
+      avatarUrl: userRecord.avatarUrl ?? "",
+      username: userRecord.username ?? "",
+      role: userRecord.role ?? "user",
+      kycStatus: effectiveKycStatus,
+      banStatus: userRecord.banStatus ?? "active",
+      kycDocumentUrl: effectiveKycQrCodeUrl,
+      shopId: shopRecord?.id ?? "",
+      shopName: effectiveShopName,
+      shopDescription: effectiveShopDescription,
+      citizenId: shopRecord?.citizenId ?? "",
+      kycCitizenId: effectiveCitizenId,
+      kycQrCodeUrl: effectiveKycQrCodeUrl,
+      hasPendingKycSubmission: Boolean(pendingSubmission),
+      moderationNote: shopRecord?.moderationNote ?? userRecord.moderationNote ?? "",
+      reviewedAt: shopRecord?.kycReviewedAt ?? userRecord.reviewedAt ?? "",
+      kycSubmittedAt: shopRecord?.kycSubmittedAt ?? "",
+      kycApprovedAt: shopRecord?.kycApprovedAt ?? "",
+      createdAt: userRecord.createdAt ?? "",
+    };
+  }
+
+  #toCategoryResponse(categoryRecord) {
+    if (!categoryRecord) return null;
+    const categoryName = safeText(categoryRecord?.name);
+    const productCount = this.state.products.filter(
+      (product) => safeText(product?.category) === categoryName,
+    ).length;
+
+    return {
+      id: categoryRecord.id ?? "",
+      name: categoryName,
+      description: categoryRecord.description ?? "",
+      productCount,
+      createdAt: categoryRecord.createdAt ?? "",
+      updatedAt: categoryRecord.updatedAt ?? "",
+    };
+  }
+
+  #toAdminProductReportResponse(reportRecord) {
+    if (!reportRecord) return null;
+    const reporter = this.#findUserById(reportRecord.reporterId);
+
+    return {
+      id: reportRecord.id ?? "",
+      reportType: reportRecord.reportType ?? "product",
+      productId: reportRecord.productId ?? "",
+      productOwnerId: reportRecord.productOwnerId ?? "",
+      productName: reportRecord.productName ?? "",
+      productCategory: reportRecord.productCategory ?? "",
+      productImageUrl: reportRecord.productImageUrl ?? "",
+      shopId: reportRecord.shopId ?? "",
+      shopOwnerId: reportRecord.shopOwnerId ?? "",
+      shopName: reportRecord.shopName ?? "",
+      shopAvatarUrl: reportRecord.shopAvatarUrl ?? "",
+      reporterId: reportRecord.reporterId ?? "",
+      reporterName: reporter?.name ?? "ผู้ใช้",
+      reason: reportRecord.reason ?? "",
+      status: reportRecord.status ?? "open",
+      createdAt: reportRecord.createdAt ?? "",
+      resolvedAt: reportRecord.resolvedAt ?? "",
+      resolutionNote: reportRecord.resolutionNote ?? "",
+    };
+  }
+
+  #appendSellerNotification({ ownerId, title, message, entityType, entityId, createdAt } = {}) {
+    const normalizedOwnerId = safeText(ownerId);
+    if (!normalizedOwnerId) return;
+
+    if (!Array.isArray(this.state.sellerNotifications)) {
+      this.state.sellerNotifications = [];
+    }
+
+    this.state.sellerNotifications.push({
+      id: createId("seller_notification"),
+      ownerId: normalizedOwnerId,
+      title: safeText(title),
+      message: safeText(message),
+      entityType: safeText(entityType),
+      entityId: safeText(entityId),
+      createdAt: safeText(createdAt) || nowIso(),
+      readAt: "",
+    });
+  }
+
+  #buildAdminDashboardSummary() {
+    const now = Date.now();
+    const last30Days = 1000 * 60 * 60 * 24 * 30;
+    const newMembersCount = this.state.users.filter((user) => {
+      if (safeText(user?.role) === "admin") return false;
+      return now - toCreatedAtTime(user?.createdAt) <= last30Days;
+    }).length;
+    const productAnnouncementsCount = this.state.products.filter((product) => this.#isProductVisible(product)).length;
+    const successfulExchangesCount = this.state.products.filter((product) => this.#isProductSold(product)).length;
+    const pendingKycCount = this.state.users.filter((user) => safeText(user?.kycStatus) === "pending").length;
+    const openReportsCount = this.state.adminProductReports.filter((report) => safeText(report?.status) === "open").length;
+
+    return {
+      newMembersCount,
+      productAnnouncementsCount,
+      successfulExchangesCount,
+      pendingKycCount,
+      openReportsCount,
+    };
   }
 
   #normalizeProductImageUrls(payload = {}) {
@@ -611,9 +1080,13 @@ export class MockDatabaseStore {
 
   #toProductResponse(productRecord) {
     if (!productRecord) return null;
+    const publicShop = this.#toPublicShopResponseByOwnerId(productRecord.ownerId);
     return {
       id: productRecord.id ?? "",
       ownerId: productRecord.ownerId ?? "",
+      shopId: publicShop?.id ?? "",
+      shopName: publicShop?.shopName ?? "",
+      shopAvatarUrl: publicShop?.avatarUrl ?? "",
       name: productRecord.name ?? "",
       category: productRecord.category ?? "",
       imageUrl: productRecord.imageUrl ?? "",
@@ -624,6 +1097,9 @@ export class MockDatabaseStore {
       saleStatus: ProductSaleLifecycle.normalizeSaleStatus(productRecord.saleStatus),
       soldAt: safeText(productRecord.soldAt),
       soldOrderId: safeText(productRecord.soldOrderId),
+      moderationStatus: safeText(productRecord.moderationStatus) || "active",
+      moderationNote: safeText(productRecord.moderationNote),
+      hiddenAt: safeText(productRecord.hiddenAt),
       isSold: ProductSaleLifecycle.isSoldStatus(productRecord.saleStatus),
       createdAt: productRecord.createdAt ?? "",
     };
@@ -631,6 +1107,10 @@ export class MockDatabaseStore {
 
   #isProductSold(productRecord) {
     return ProductSaleLifecycle.isSoldStatus(productRecord?.saleStatus);
+  }
+
+  #isProductVisible(productRecord) {
+    return safeText(productRecord?.moderationStatus) !== "taken_down";
   }
 
   #shouldKeepProductReserved(status) {
@@ -882,6 +1362,11 @@ export class MockDatabaseStore {
       return;
     }
 
+    if (statuses.every((status) => status === "cancelled")) {
+      orderRecord.status = "cancelled";
+      return;
+    }
+
     if (statuses.every((status) => status === "cancelled_by_seller")) {
       orderRecord.status = "cancelled_by_seller";
       return;
@@ -1028,6 +1513,7 @@ export class MockDatabaseStore {
         : null,
       parcelPayment: shopOrderRecord?.parcelPayment
         ? {
+            paymentMethod: ParcelPaymentMethod.normalize(shopOrderRecord.parcelPayment.paymentMethod),
             qrCodeUrl: normalizeImageUrl(shopOrderRecord.parcelPayment.qrCodeUrl, "product"),
             receiptImageUrl: normalizeImageUrl(shopOrderRecord.parcelPayment.receiptImageUrl, "product"),
             status: safeText(shopOrderRecord.parcelPayment.status),
@@ -1102,7 +1588,9 @@ export class MockDatabaseStore {
       subtotal: toNumber(shopOrder.subtotal, 0),
       createdAt: safeText(orderRecord.createdAt),
       submittedAt: safeText(shopOrder.parcelPayment?.submittedAt) || safeText(orderRecord.createdAt),
+      paymentMethod: shopOrder.parcelPayment?.paymentMethod ?? ParcelPaymentMethod.QR_CODE,
       receiptImageUrl: normalizeImageUrl(shopOrder.parcelPayment?.receiptImageUrl, "product"),
+      parcelPayment: shopOrder.parcelPayment,
       buyerShippingAddress: shopOrder.buyerShippingAddress,
       adminReport: shopOrder.adminReport,
     };
@@ -1115,9 +1603,13 @@ export class MockDatabaseStore {
     const user = this.#findUserByIdentifier(identifier);
 
     if (!user || user.password !== password) {
-      throw new Error("อีเมล/เบอร์โทร หรือรหัสผ่านไม่ถูกต้อง");
+      throw new Error("ชื่อผู้ใช้/อีเมล/เบอร์โทร หรือรหัสผ่านไม่ถูกต้อง");
+    }
+    if (safeText(user?.banStatus) === "banned" && safeText(user?.role) !== "admin") {
+      throw new Error("บัญชีนี้ถูกระงับการใช้งาน");
     }
 
+    user.lastLoginAt = nowIso();
     this.state.session = { userId: user.id };
     this.#persist();
 
@@ -1139,15 +1631,25 @@ export class MockDatabaseStore {
     const firstName = safeText(payload.firstName);
     const lastName = safeText(payload.lastName);
     const name = safeText(payload.name) || `${firstName} ${lastName}`.trim() || "ผู้ใช้ใหม่";
+    const fallbackUsername = toLower(email.split("@")[0]);
 
     const createdUser = {
       id: createId("user"),
       name,
+      username: fallbackUsername,
       email,
       password: `${payload.password ?? ""}`,
       avatarUrl: normalizeImageUrl(payload.avatarUrl, "avatar") || DEFAULT_AVATAR_URL,
       phone: safeText(payload.phone),
       address: safeText(payload.address),
+      role: "user",
+      kycStatus: "pending",
+      banStatus: "active",
+      kycDocumentUrl: "",
+      moderationNote: "",
+      reviewedAt: "",
+      createdAt: nowIso(),
+      lastLoginAt: "",
     };
 
     this.state.users.push(createdUser);
@@ -1164,8 +1666,7 @@ export class MockDatabaseStore {
   }
 
   authMe() {
-    const user = this.#getCurrentUserRecord();
-    if (!user) throw new Error("ยังไม่ได้เข้าสู่ระบบ");
+    const user = this.#requireCurrentUser();
     return {
       user: this.#toPublicUser(user),
     };
@@ -1251,6 +1752,12 @@ export class MockDatabaseStore {
       );
       return !isBuyerOrder && !hasDeletedSeller;
     });
+    this.state.adminProductReports = ensureArray(this.state.adminProductReports).filter(
+      (report) => safeText(report?.reporterId) !== userId,
+    );
+    this.state.sellerNotifications = ensureArray(this.state.sellerNotifications).filter(
+      (notification) => safeText(notification?.ownerId) !== userId,
+    );
     this.state.chats = this.state.chats.filter((chat) => {
       const isParticipant =
         safeText(chat?.ownerId) === userId ||
@@ -1262,6 +1769,373 @@ export class MockDatabaseStore {
     this.#persist();
 
     return { ok: true };
+  }
+
+  listPublicCategories() {
+    return {
+      categories: ensureArray(this.state.adminCategories).map((category) => this.#toCategoryResponse(category)),
+    };
+  }
+
+  createProductReport(productId, payloadInput = {}) {
+    const user = this.#requireCurrentUser();
+    const payload = toPayloadObject(payloadInput);
+    const normalizedProductId = safeText(productId);
+    const reason = safeText(payload.reason);
+    const product = this.#findProductById(normalizedProductId);
+
+    if (!product || !this.#isProductVisible(product)) {
+      throw new Error("ไม่พบสินค้าที่ต้องการรายงาน");
+    }
+    if (!reason) {
+      throw new Error("กรุณาระบุปัญหาของสินค้าที่ต้องการรายงาน");
+    }
+
+    const publicShop = this.#toPublicShopResponseByOwnerId(product.ownerId);
+    const createdReport = normalizeAdminProductReportRecord({
+      id: createId("product_report"),
+      reportType: "product",
+      productId: product.id,
+      productOwnerId: product.ownerId,
+      productName: product.name,
+      productCategory: product.category,
+      productImageUrl: product.imageUrl,
+      shopId: publicShop?.id ?? "",
+      shopOwnerId: product.ownerId,
+      shopName: publicShop?.shopName ?? "",
+      shopAvatarUrl: publicShop?.avatarUrl ?? "",
+      reporterId: user.id,
+      reason,
+      status: "open",
+      createdAt: safeText(payload.submittedAt) || nowIso(),
+    });
+
+    this.state.adminProductReports.push(createdReport);
+    this.#persist();
+
+    return {
+      report: this.#toAdminProductReportResponse(createdReport),
+      message: "ส่งรายงานสินค้าไปให้ผู้ดูแลระบบแล้ว",
+    };
+  }
+
+  createShopReport(ownerId, payloadInput = {}) {
+    const user = this.#requireCurrentUser();
+    const payload = toPayloadObject(payloadInput);
+    const normalizedOwnerId = safeText(ownerId);
+    const reason = safeText(payload.reason);
+    const publicShop = this.#toPublicShopResponseByOwnerId(normalizedOwnerId);
+
+    if (!publicShop) {
+      throw new Error("ไม่พบร้านค้าที่ต้องการรายงาน");
+    }
+    if (!reason) {
+      throw new Error("กรุณาระบุปัญหาของร้านค้าที่ต้องการรายงาน");
+    }
+
+    const createdReport = normalizeAdminProductReportRecord({
+      id: createId("shop_report"),
+      reportType: "shop",
+      shopId: publicShop.id,
+      shopOwnerId: normalizedOwnerId,
+      shopName: publicShop.shopName,
+      shopAvatarUrl: publicShop.avatarUrl,
+      reporterId: user.id,
+      reason,
+      status: "open",
+      createdAt: safeText(payload.submittedAt) || nowIso(),
+    });
+
+    this.state.adminProductReports.push(createdReport);
+    this.#persist();
+
+    return {
+      report: this.#toAdminProductReportResponse(createdReport),
+      message: "ส่งรายงานร้านค้าไปให้ผู้ดูแลระบบแล้ว",
+    };
+  }
+
+  adminDashboard() {
+    this.#requireAdminUser();
+    return {
+      summary: this.#buildAdminDashboardSummary(),
+    };
+  }
+
+  listAdminMembers() {
+    this.#requireAdminUser();
+    const members = sortByCreatedAtDesc(
+      ensureArray(this.state.users).filter((user) => safeText(user?.role) !== "admin"),
+    ).map((user) => this.#toAdminMemberResponse(user));
+
+    return { members };
+  }
+
+  updateAdminMemberDecision(memberId, payloadInput = {}) {
+    const admin = this.#requireAdminUser();
+    const payload = toPayloadObject(payloadInput);
+    const action = safeText(payload.action);
+    const note = safeText(payload.note ?? payload.reason);
+    const normalizedMemberId = safeText(memberId);
+    const member = this.state.users.find(
+      (user) => safeText(user?.id) === normalizedMemberId && safeText(user?.role) !== "admin",
+    );
+
+    if (!member) throw new Error("ไม่พบสมาชิกที่ต้องการจัดการ");
+    if (!["approve_kyc", "reject_kyc", "ban", "unban"].includes(action)) {
+      throw new Error("ไม่พบ action สำหรับจัดการสมาชิก");
+    }
+
+    const actedAt = nowIso();
+    const shop = this.#findShopProfileByOwnerId(member.id);
+    const pendingSubmission = shop?.pendingSubmission ?? null;
+    const hasShopSubmission = Boolean(pendingSubmission);
+
+    if (action === "approve_kyc") {
+      member.kycStatus = "approved";
+      member.reviewedAt = actedAt;
+      member.moderationNote = note;
+      if (shop) {
+        if (pendingSubmission) {
+          shop.shopName = pendingSubmission.shopName ?? "";
+          shop.description = pendingSubmission.description ?? "";
+          if (safeText(pendingSubmission.citizenId)) {
+            shop.citizenId = pendingSubmission.citizenId;
+          }
+          if (safeText(pendingSubmission.parcelQrCodeUrl)) {
+            shop.parcelQrCodeUrl = pendingSubmission.parcelQrCodeUrl;
+          }
+        }
+        shop.kycStatus = "approved";
+        shop.kycSubmittedAt = pendingSubmission?.submittedAt ?? shop.kycSubmittedAt ?? actedAt;
+        shop.kycReviewedAt = actedAt;
+        shop.kycApprovedAt = actedAt;
+        shop.moderationNote = note;
+        shop.pendingSubmission = null;
+        member.kycDocumentUrl = shop.parcelQrCodeUrl ?? member.kycDocumentUrl;
+      }
+    } else if (action === "reject_kyc") {
+      member.kycStatus = "rejected";
+      member.reviewedAt = actedAt;
+      member.moderationNote = note;
+      if (shop) {
+        shop.kycStatus = "rejected";
+        shop.kycSubmittedAt = pendingSubmission?.submittedAt ?? shop.kycSubmittedAt;
+        shop.kycReviewedAt = actedAt;
+        shop.moderationNote = note || "เอกสาร KYC ไม่ผ่านการตรวจสอบ";
+        shop.pendingSubmission = null;
+        member.kycDocumentUrl = shop.parcelQrCodeUrl ?? "";
+      }
+    } else if (action === "ban") {
+      member.banStatus = "banned";
+      member.reviewedAt = actedAt;
+      member.moderationNote = note || "บัญชีถูกระงับโดยผู้ดูแลระบบ";
+      if (safeText(this.state?.session?.userId) === safeText(member.id)) {
+        this.state.session = { userId: "" };
+      }
+    } else {
+      member.banStatus = "active";
+      member.reviewedAt = actedAt;
+      member.moderationNote = note;
+    }
+
+    this.#persist();
+
+    return {
+      member: this.#toAdminMemberResponse(member),
+      message:
+        action === "approve_kyc"
+          ? hasShopSubmission
+            ? "อนุมัติ KYC และบันทึกข้อมูลร้านแล้ว"
+            : "อนุมัติสมาชิกแล้ว"
+          : action === "reject_kyc"
+            ? hasShopSubmission
+              ? "ไม่อนุมัติ KYC และยังไม่บันทึกข้อมูลร้าน"
+              : "ไม่อนุมัติ KYC แล้ว"
+            : action === "ban"
+              ? `ระงับบัญชีโดย ${admin.name || "ผู้ดูแลระบบ"} แล้ว`
+              : "ปลดระงับบัญชีแล้ว",
+    };
+  }
+
+  listAdminProductReports() {
+    this.#requireAdminUser();
+    const reports = sortByCreatedAtDesc(ensureArray(this.state.adminProductReports)).map((report) =>
+      this.#toAdminProductReportResponse(report),
+    );
+
+    return { reports };
+  }
+
+  updateAdminProductReportDecision(reportId, payloadInput = {}) {
+    this.#requireAdminUser();
+    const payload = toPayloadObject(payloadInput);
+    const action = safeText(payload.action);
+    const note = safeText(payload.note ?? payload.reason);
+    const report = this.#findAdminProductReportById(reportId);
+
+    if (!report) throw new Error("ไม่พบรายงานที่ต้องการจัดการ");
+    if (!["dismiss", "take_down"].includes(action)) {
+      throw new Error("ไม่พบ action สำหรับจัดการรายงาน");
+    }
+    if (action === "take_down" && safeText(report.reportType) === "shop") {
+      throw new Error("รายงานร้านค้ารองรับเฉพาะการลบรายงาน");
+    }
+    if (action === "take_down" && !note) {
+      throw new Error("กรุณาระบุสาเหตุการลบสินค้า");
+    }
+
+    if (safeText(report.reportType) === "shop" && action === "dismiss") {
+      this.state.adminProductReports = ensureArray(this.state.adminProductReports).filter(
+        (item) => safeText(item?.id) !== safeText(report.id),
+      );
+      this.#persist();
+
+      return {
+        report: null,
+        deletedReportId: report.id,
+        message: "ลบรายงานร้านค้าออกจากระบบแล้ว",
+      };
+    }
+
+    const resolvedAt = nowIso();
+    report.status = action === "take_down" ? "taken_down" : "dismissed";
+    report.resolvedAt = resolvedAt;
+    report.resolutionNote = note || report.reason;
+
+    if (action === "take_down") {
+      const product = this.#findProductById(report.productId);
+      if (product) {
+        product.moderationStatus = "taken_down";
+        product.moderationNote = note || report.reason;
+        product.hiddenAt = resolvedAt;
+      }
+
+      this.#appendSellerNotification({
+        ownerId: report.productOwnerId ?? report.shopOwnerId,
+        title: "สินค้าถูกลบออกจากร้านค้า",
+        message: `สินค้าชื่อ "${report.productName || "สินค้า"}" ถูกลบออกจากร้านค้าโดยผู้ดูแลระบบ เนื่องจาก: ${note}`,
+        entityType: "product",
+        entityId: report.productId,
+        createdAt: resolvedAt,
+      });
+    }
+
+    this.#persist();
+
+    return {
+      report: this.#toAdminProductReportResponse(report),
+      message:
+        action === "take_down"
+          ? `ลบสินค้าออกจากร้านค้าและส่งข้อความแจ้งเตือนไปยัง ${report.shopName || "ร้านค้า"} แล้ว`
+          : safeText(report.reportType) === "shop"
+            ? "ลบรายงานร้านค้าแล้ว"
+            : "ปฏิเสธรายงานสินค้าแล้ว",
+    };
+  }
+
+  listAdminCategories() {
+    this.#requireAdminUser();
+    return {
+      categories: ensureArray(this.state.adminCategories).map((category) => this.#toCategoryResponse(category)),
+    };
+  }
+
+  createAdminCategory(payloadInput = {}) {
+    this.#requireAdminUser();
+    const payload = toPayloadObject(payloadInput);
+    const name = safeText(payload.name);
+    const description = safeText(payload.description);
+
+    if (!name) throw new Error("กรุณากรอกชื่อหมวดหมู่");
+    if (this.state.adminCategories.some((category) => toLower(category.name) === toLower(name))) {
+      throw new Error("ชื่อหมวดหมู่นี้มีอยู่แล้ว");
+    }
+
+    const createdCategory = normalizeCategoryRecord({
+      id: createId("category"),
+      name,
+      description,
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+    });
+
+    this.state.adminCategories.push(createdCategory);
+    this.#persist();
+
+    return {
+      category: this.#toCategoryResponse(createdCategory),
+      categories: this.listAdminCategories().categories,
+      message: "เพิ่มหมวดหมู่แล้ว",
+    };
+  }
+
+  updateAdminCategory(categoryId, payloadInput = {}) {
+    this.#requireAdminUser();
+    const payload = toPayloadObject(payloadInput);
+    const category = this.#findCategoryById(categoryId);
+    const nextName = safeText(payload.name);
+    const nextDescription = safeText(payload.description);
+
+    if (!category) throw new Error("ไม่พบหมวดหมู่ที่ต้องการแก้ไข");
+    if (!nextName) throw new Error("กรุณากรอกชื่อหมวดหมู่");
+    if (this.state.adminCategories.some(
+      (item) => safeText(item?.id) !== safeText(categoryId) && toLower(item?.name) === toLower(nextName),
+    )) {
+      throw new Error("ชื่อหมวดหมู่นี้มีอยู่แล้ว");
+    }
+
+    const previousName = safeText(category.name);
+    category.name = nextName;
+    category.description = nextDescription;
+    category.updatedAt = nowIso();
+
+    if (previousName && previousName !== nextName) {
+      this.state.products = ensureArray(this.state.products).map((product) =>
+        safeText(product?.category) === previousName
+          ? {
+              ...product,
+              category: nextName,
+            }
+          : product,
+      );
+      this.state.adminProductReports = ensureArray(this.state.adminProductReports).map((report) =>
+        safeText(report?.productCategory) === previousName
+          ? {
+              ...report,
+              productCategory: nextName,
+            }
+          : report,
+      );
+    }
+
+    this.#persist();
+
+    return {
+      category: this.#toCategoryResponse(category),
+      categories: this.listAdminCategories().categories,
+      message: "แก้ไขหมวดหมู่แล้ว",
+    };
+  }
+
+  deleteAdminCategory(categoryId) {
+    this.#requireAdminUser();
+    const category = this.#findCategoryById(categoryId);
+
+    if (!category) throw new Error("ไม่พบหมวดหมู่ที่ต้องการลบ");
+    if (this.state.products.some((product) => safeText(product?.category) === safeText(category?.name))) {
+      throw new Error("หมวดหมู่นี้ยังถูกใช้งานอยู่ ไม่สามารถลบได้");
+    }
+
+    this.state.adminCategories = ensureArray(this.state.adminCategories).filter(
+      (item) => safeText(item?.id) !== safeText(categoryId),
+    );
+    this.#persist();
+
+    return {
+      categories: this.listAdminCategories().categories,
+      message: "ลบหมวดหมู่แล้ว",
+    };
   }
 
   myShopMe() {
@@ -1276,15 +2150,14 @@ export class MockDatabaseStore {
     const user = this.#requireCurrentUser();
     const payload = toPayloadObject(payloadInput);
     const shop = this.#getOrCreateShopProfile(user.id);
-
-    shop.shopName = safeText(payload.shopName) || shop.shopName;
-    shop.description = safeText(payload.description) || shop.description;
-    shop.contact = safeText(payload.contact) || shop.contact;
-
     const nextAvatar = normalizeImageUrl(payload.avatar ?? payload.avatarUrl, "avatar");
     if (nextAvatar) shop.avatarUrl = nextAvatar;
 
-    const nextParcelQrCode = normalizeImageUrl(
+    const nextShopName = safeText(payload.shopName);
+    const nextDescription = safeText(payload.description);
+    const nextCitizenId = toDigits(payload.citizenId).slice(0, 13);
+    const hasIncomingQrUpload = Boolean(payload.parcelQrCode ?? payload.paymentQrCode);
+    const submittedQrCode = normalizeImageUrl(
       payload.parcelQrCode ??
         payload.paymentQrCode ??
         payload.parcelQrCodeUrl ??
@@ -1292,12 +2165,67 @@ export class MockDatabaseStore {
         payload.qrCodeUrl,
       "product",
     );
-    if (nextParcelQrCode) shop.parcelQrCodeUrl = nextParcelQrCode;
+
+    const hasApprovedKycHistory = Boolean(safeText(shop.kycApprovedAt));
+    const hasPendingSubmission = Boolean(shop.pendingSubmission);
+    const currentCitizenId = toDigits(shop.citizenId).slice(0, 13);
+    const effectiveCitizenId = currentCitizenId || nextCitizenId;
+    const effectiveQrCode =
+      submittedQrCode ||
+      safeText(shop.pendingSubmission?.parcelQrCodeUrl) ||
+      safeText(shop.parcelQrCodeUrl);
+    const isQrCodeChanged =
+      hasIncomingQrUpload ||
+      (Boolean(submittedQrCode) && submittedQrCode !== safeText(shop.parcelQrCodeUrl));
+
+    if (!nextShopName) {
+      throw new Error("กรุณากรอกชื่อร้าน");
+    }
+    if (effectiveCitizenId.length !== 13) {
+      throw new Error("กรุณากรอกเลขบัตรประชาชนให้ครบ 13 หลัก");
+    }
+    if (hasApprovedKycHistory && currentCitizenId && nextCitizenId && nextCitizenId !== currentCitizenId) {
+      throw new Error("เลขบัตรประชาชนจะไม่สามารถแก้ไขได้หลังได้รับอนุมัติ KYC");
+    }
+
+    if (hasApprovedKycHistory && !hasPendingSubmission && !isQrCodeChanged) {
+      shop.shopName = nextShopName;
+      shop.description = nextDescription;
+      if (!shop.citizenId) shop.citizenId = effectiveCitizenId;
+      this.#persist();
+
+      return {
+        shop: this.#toShopResponse(shop),
+        message: "บันทึกข้อมูลร้านเรียบร้อย",
+      };
+    }
+
+    if (!effectiveQrCode) {
+      throw new Error("กรุณาอัปโหลด QR code ร้านก่อนส่งตรวจสอบ");
+    }
+
+    const submittedAt = nowIso();
+    shop.pendingSubmission = normalizeShopKycSubmissionRecord({
+      shopName: nextShopName,
+      description: nextDescription,
+      citizenId: effectiveCitizenId,
+      parcelQrCodeUrl: effectiveQrCode,
+      submittedAt,
+    });
+    shop.kycStatus = "pending";
+    shop.kycSubmittedAt = submittedAt;
+    shop.kycReviewedAt = "";
+    shop.moderationNote = "";
+    user.kycStatus = "pending";
+    user.reviewedAt = "";
+    user.moderationNote = "";
+    user.kycDocumentUrl = effectiveQrCode;
 
     this.#persist();
 
     return {
       shop: this.#toShopResponse(shop),
+      message: "ส่งตรวจสอบ KYC แล้ว สถานะเปลี่ยนเป็นรออนุมัติ",
     };
   }
 
@@ -1335,9 +2263,38 @@ export class MockDatabaseStore {
     return { reviews };
   }
 
+  getSellerStorefrontByOwnerId(ownerId) {
+    const normalizedOwnerId = safeText(ownerId);
+    if (!normalizedOwnerId) {
+      throw new Error("ไม่พบรหัสร้านค้าที่ต้องการเปิด");
+    }
+
+    const shop = this.#toPublicShopResponseByOwnerId(normalizedOwnerId);
+    if (!shop) {
+      throw new Error("ไม่พบร้านค้าที่ต้องการเปิด");
+    }
+
+    const products = sortByCreatedAtDesc(this.state.products)
+      .filter(
+        (product) =>
+          safeText(product?.ownerId) === normalizedOwnerId &&
+          !this.#isProductSold(product) &&
+          this.#isProductVisible(product),
+      )
+      .map((product) => this.#toProductResponse(product));
+
+    return {
+      storefront: {
+        shop,
+        products,
+      },
+      message: "โหลดหน้าร้านสำเร็จ",
+    };
+  }
+
   listMarketplaceProducts() {
     const products = sortByCreatedAtDesc(this.state.products)
-      .filter((product) => !this.#isProductSold(product))
+      .filter((product) => !this.#isProductSold(product) && this.#isProductVisible(product))
       .map((product) => this.#toProductResponse(product));
     return { products };
   }
@@ -1345,7 +2302,7 @@ export class MockDatabaseStore {
   getMarketplaceProductById(productId) {
     const product = this.#findProductById(productId);
     return {
-      product: product ? this.#toProductResponse(product) : null,
+      product: product && this.#isProductVisible(product) ? this.#toProductResponse(product) : null,
     };
   }
 
@@ -1354,6 +2311,7 @@ export class MockDatabaseStore {
     const products = sortByCreatedAtDesc(this.state.products)
       .filter((product) => {
         if (this.#isProductSold(product)) return false;
+        if (!this.#isProductVisible(product)) return false;
         if (!keyword) return true;
         const source = `${product?.name ?? ""} ${product?.description ?? ""}`.toLowerCase();
         return source.includes(keyword);
@@ -1629,9 +2587,9 @@ export class MockDatabaseStore {
     const chat = this.#findChatById(chatId);
     this.#assertChatAccess(chat, currentUser.id);
 
-    if (safeText(chat?.ownerId) !== safeText(currentUser.id)) {
-      throw new Error("เฉพาะคนขายเท่านั้นที่ตอบกลับข้อเสนอนัดรับได้");
-    }
+    const isSeller = safeText(chat?.ownerId) === safeText(currentUser.id);
+    const isBuyer = safeText(chat?.buyerId) === safeText(currentUser.id);
+    if (!isSeller && !isBuyer) throw new Error("ไม่สามารถตอบกลับข้อเสนอนัดรับนี้ได้");
 
     const action = safeText(payload.action);
     const nextLocation = safeText(payload.location);
@@ -1648,8 +2606,11 @@ export class MockDatabaseStore {
       throw new Error("ไม่พบกล่องข้อเสนอนัดรับที่ต้องการตอบกลับ");
     }
 
-    if (safeText(proposalMessage.meetupProposal.status) !== "pending_seller_response") {
-      throw new Error("ข้อเสนอนัดรับนี้ถูกตอบกลับแล้ว");
+    const proposalStatus = safeText(proposalMessage.meetupProposal.status);
+    const canSellerRespond = isSeller && proposalStatus === "pending_seller_response";
+    const canBuyerRespond = isBuyer && proposalStatus === "countered_by_seller";
+    if (!canSellerRespond && !canBuyerRespond) {
+      throw new Error("ข้อเสนอนัดรับนี้ไม่อยู่ในสถานะที่ตอบกลับได้");
     }
 
     const order = this.state.orders.find((item) => safeText(item?.id) === safeText(proposalMessage.orderId));
@@ -1665,52 +2626,105 @@ export class MockDatabaseStore {
     }
 
     const respondedAt = nowIso();
-    const sellerName = this.#findUserById(currentUser.id)?.name ?? "คนขาย";
+    const currentUserName = this.#findUserById(currentUser.id)?.name ?? (isSeller ? "คนขาย" : "ผู้ซื้อ");
 
-    if (action === "accept") {
+    if (canSellerRespond) {
+      if (action === "accept") {
+        proposalMessage.meetupProposal.status = "awaiting_meetup";
+        proposalMessage.meetupProposal.respondedBy = currentUser.id;
+        proposalMessage.meetupProposal.respondedAt = respondedAt;
+
+        shopOrder.status = "awaiting_meetup";
+        shopOrder.meetupProposal.status = "awaiting_meetup";
+        shopOrder.meetupProposal.proposedAt = shopOrder.meetupProposal.proposedAt || proposalMessage.meetupProposal.proposedAt;
+        shopOrder.meetupProposal.respondedBy = currentUser.id;
+        shopOrder.meetupProposal.respondedAt = respondedAt;
+
+        this.#appendChatMessage(chat, {
+          senderId: currentUser.id,
+          text: `${currentUserName} ยอมรับข้อเสนอสถานที่นัดรับแล้ว สถานะคำสั่งซื้อเปลี่ยนเป็นรอนัดพบ`,
+        });
+      } else if (action === "counter") {
+        proposalMessage.meetupProposal.status = "countered_by_seller";
+        proposalMessage.meetupProposal.responseLocation = nextLocation;
+        proposalMessage.meetupProposal.respondedBy = currentUser.id;
+        proposalMessage.meetupProposal.respondedAt = respondedAt;
+
+        shopOrder.status = "countered_by_seller";
+        shopOrder.meetupProposal.status = "countered_by_seller";
+        shopOrder.meetupProposal.responseLocation = nextLocation;
+        shopOrder.meetupProposal.respondedBy = currentUser.id;
+        shopOrder.meetupProposal.respondedAt = respondedAt;
+
+        this.#appendChatMessage(chat, {
+          senderId: currentUser.id,
+          text: `${currentUserName} เสนอเปลี่ยนสถานที่นัดรับเป็น: ${nextLocation}`,
+        });
+      } else {
+        proposalMessage.meetupProposal.status = "cancelled_by_seller";
+        proposalMessage.meetupProposal.respondedBy = currentUser.id;
+        proposalMessage.meetupProposal.respondedAt = respondedAt;
+
+        shopOrder.status = "cancelled_by_seller";
+        shopOrder.meetupProposal.status = "cancelled_by_seller";
+        shopOrder.meetupProposal.respondedBy = currentUser.id;
+        shopOrder.meetupProposal.respondedAt = respondedAt;
+
+        this.#appendChatMessage(chat, {
+          senderId: currentUser.id,
+          text: `${currentUserName} ยกเลิกการนัดรับสำหรับคำสั่งซื้อนี้แล้ว`,
+        });
+      }
+    } else if (action === "accept") {
       proposalMessage.meetupProposal.status = "awaiting_meetup";
       proposalMessage.meetupProposal.respondedBy = currentUser.id;
       proposalMessage.meetupProposal.respondedAt = respondedAt;
 
       shopOrder.status = "awaiting_meetup";
       shopOrder.meetupProposal.status = "awaiting_meetup";
-      shopOrder.meetupProposal.proposedAt = shopOrder.meetupProposal.proposedAt || proposalMessage.meetupProposal.proposedAt;
       shopOrder.meetupProposal.respondedBy = currentUser.id;
       shopOrder.meetupProposal.respondedAt = respondedAt;
 
       this.#appendChatMessage(chat, {
         senderId: currentUser.id,
-        text: `${sellerName} ยอมรับข้อเสนอสถานที่นัดรับแล้ว สถานะคำสั่งซื้อเปลี่ยนเป็นรอนัดพบ`,
+        text: `${currentUserName} ยืนยันสถานที่นัดรับที่คนขายเสนอแล้ว สถานะคำสั่งซื้อเปลี่ยนเป็นรอนัดพบ`,
       });
     } else if (action === "counter") {
-      proposalMessage.meetupProposal.status = "countered_by_seller";
-      proposalMessage.meetupProposal.responseLocation = nextLocation;
-      proposalMessage.meetupProposal.respondedBy = currentUser.id;
-      proposalMessage.meetupProposal.respondedAt = respondedAt;
+      proposalMessage.meetupProposal.location = nextLocation;
+      proposalMessage.meetupProposal.status = "pending_seller_response";
+      proposalMessage.meetupProposal.proposedBy = currentUser.id;
+      proposalMessage.meetupProposal.proposedAt = respondedAt;
+      proposalMessage.meetupProposal.responseLocation = "";
+      proposalMessage.meetupProposal.respondedBy = "";
+      proposalMessage.meetupProposal.respondedAt = "";
 
-      shopOrder.status = "countered_by_seller";
-      shopOrder.meetupProposal.status = "countered_by_seller";
-      shopOrder.meetupProposal.responseLocation = nextLocation;
-      shopOrder.meetupProposal.respondedBy = currentUser.id;
-      shopOrder.meetupProposal.respondedAt = respondedAt;
+      shopOrder.status = "pending_meetup_response";
+      shopOrder.meetupProposal.location = nextLocation;
+      shopOrder.meetupProposal.status = "pending_seller_response";
+      shopOrder.meetupProposal.proposedBy = currentUser.id;
+      shopOrder.meetupProposal.proposedAt = respondedAt;
+      shopOrder.meetupProposal.responseLocation = "";
+      shopOrder.meetupProposal.respondedBy = "";
+      shopOrder.meetupProposal.respondedAt = "";
 
       this.#appendChatMessage(chat, {
         senderId: currentUser.id,
-        text: `${sellerName} เสนอเปลี่ยนสถานที่นัดรับเป็น: ${nextLocation}`,
+        text: `${currentUserName} เสนอสถานที่นัดรับใหม่เป็น: ${nextLocation}`,
       });
     } else {
-      proposalMessage.meetupProposal.status = "cancelled_by_seller";
+      proposalMessage.meetupProposal.status = "rejected_by_buyer";
       proposalMessage.meetupProposal.respondedBy = currentUser.id;
       proposalMessage.meetupProposal.respondedAt = respondedAt;
 
-      shopOrder.status = "cancelled_by_seller";
-      shopOrder.meetupProposal.status = "cancelled_by_seller";
+      shopOrder.status = "rejected_by_buyer";
+      shopOrder.meetupProposal.status = "rejected_by_buyer";
       shopOrder.meetupProposal.respondedBy = currentUser.id;
       shopOrder.meetupProposal.respondedAt = respondedAt;
 
       this.#appendChatMessage(chat, {
         senderId: currentUser.id,
-        text: `${sellerName} ยกเลิกการนัดรับสำหรับคำสั่งซื้อนี้แล้ว`,
+        orderId: order.id,
+        text: `${currentUserName} ยกเลิกคำสั่งซื้อสำหรับการนัดรับนี้แล้ว`,
       });
     }
 
@@ -1766,7 +2780,7 @@ export class MockDatabaseStore {
 
     if (!normalizedOrderId) throw new Error("ไม่พบ orderId");
     if (!normalizedShopOrderKey) throw new Error("ไม่พบ shopOrderKey");
-    if (!["approve", "report"].includes(action)) {
+    if (!["approve", "report", "cancel"].includes(action)) {
       throw new Error("ไม่พบ action สำหรับตรวจสอบการชำระ");
     }
 
@@ -1813,7 +2827,26 @@ export class MockDatabaseStore {
         this.#appendChatMessage(chat, {
           senderId: currentUser.id,
           orderId: order.id,
-          text: `${sellerName} ยืนยันการชำระเงินสำหรับคำสั่งซื้อ #${order.id} แล้ว สถานะเปลี่ยนเป็นรอรับพัสดุ`,
+          text: ParcelPaymentMethod.isCashOnDelivery(shopOrder?.parcelPayment?.paymentMethod)
+            ? `${sellerName} ยืนยันคำสั่งซื้อเก็บเงินปลายทางสำหรับคำสั่งซื้อ #${order.id} แล้ว สถานะเปลี่ยนเป็นรอรับพัสดุ`
+            : `${sellerName} ยืนยันการชำระเงินสำหรับคำสั่งซื้อ #${order.id} แล้ว สถานะเปลี่ยนเป็นรอรับพัสดุ`,
+        });
+      }
+    } else if (action === "cancel") {
+      shopOrder.status = "cancelled";
+      shopOrder.parcelPayment.status = "cancelled";
+      shopOrder.adminReport = null;
+
+      if (firstItem?.productId) {
+        const chat = this.#findOrCreateCheckoutChat({
+          buyerId: order.userId,
+          ownerId: shopOrder.ownerId,
+          productId: firstItem.productId,
+        });
+        this.#appendChatMessage(chat, {
+          senderId: currentUser.id,
+          orderId: order.id,
+          text: `${sellerName} ยกเลิกคำสั่งซื้อ #${order.id} แล้ว${note ? `: ${note}` : ""}`,
         });
       }
     } else {
@@ -1865,7 +2898,9 @@ export class MockDatabaseStore {
       message:
         action === "approve"
           ? `ยืนยันคำสั่งซื้อของ ${buyer?.name ?? "ผู้ซื้อ"} แล้ว สถานะเปลี่ยนเป็นรอรับพัสดุ`
-          : "รายงานรายการนี้ไปยัง Admin แล้ว",
+          : action === "cancel"
+            ? `ยกเลิกคำสั่งซื้อของ ${buyer?.name ?? "ผู้ซื้อ"} แล้ว`
+            : "รายงานรายการนี้ไปยัง Admin แล้ว",
     };
   }
 
@@ -1951,6 +2986,9 @@ export class MockDatabaseStore {
     const product = this.#findProductById(productId);
 
     if (!product) throw new Error("ไม่พบสินค้าที่ต้องการเพิ่มลงตะกร้า");
+    if (safeText(product?.ownerId) === safeText(user?.id)) {
+      throw new Error("ไม่สามารถเพิ่มสินค้าของร้านตัวเองลงตะกร้าได้");
+    }
     if (this.#isProductSold(product)) throw new Error("สินค้านี้ขายออกแล้ว");
 
     const cart = this.#getOrCreateCart(user.id);
@@ -2089,6 +3127,14 @@ export class MockDatabaseStore {
       }
 
       const shippingMethod = ShippingMethod.normalize(shopOrder?.shippingMethod);
+      const paymentMethod = ShippingMethod.isParcel(shippingMethod)
+        ? ParcelPaymentMethod.normalize(
+            shopOrder?.paymentMethod ??
+              shopOrder?.parcelPaymentMethod ??
+              shopOrder?.parcelPayment?.paymentMethod ??
+              shopOrder?.parcelPayment?.method,
+          )
+        : "";
       const shop = this.#findShopProfileByOwnerId(normalizedOwnerId);
       const meetupLocation = safeText(shopOrder?.meetupLocation);
       const buyerShippingAddressInput =
@@ -2115,10 +3161,13 @@ export class MockDatabaseStore {
       }
 
       if (ShippingMethod.isParcel(shippingMethod)) {
-        if (!safeText(shop?.parcelQrCodeUrl)) {
+        if (
+          ParcelPaymentMethod.requiresSellerQrCode(paymentMethod) &&
+          !safeText(shop?.parcelQrCodeUrl)
+        ) {
           throw new Error(`ร้าน ${shop?.shopName || selectedItems[0]?.shopName || index + 1} ยังไม่ได้ตั้งค่า QR code รับชำระ`);
         }
-        if (!receiptImageUrl) {
+        if (ParcelPaymentMethod.requiresReceipt(paymentMethod) && !receiptImageUrl) {
           throw new Error(`กรุณาแนบรูปใบเสร็จสำหรับร้าน ${shop?.shopName || selectedItems[0]?.shopName || index + 1}`);
         }
         if (!buyerShippingAddress.address) {
@@ -2153,7 +3202,10 @@ export class MockDatabaseStore {
           : null,
         parcelPayment: ShippingMethod.isParcel(shippingMethod)
           ? {
-              qrCodeUrl: shop?.parcelQrCodeUrl ?? "",
+              paymentMethod,
+              qrCodeUrl: ParcelPaymentMethod.requiresSellerQrCode(paymentMethod)
+                ? shop?.parcelQrCodeUrl ?? ""
+                : "",
               receiptImageUrl,
               status: "pending_seller_confirmation",
               submittedAt: nowIso(),
@@ -2223,10 +3275,13 @@ export class MockDatabaseStore {
         text: [
           `คำขอสั่งซื้อ #${createdOrder.id}`,
           "วิธีจัดส่ง: ส่งพัสดุ",
+          `วิธีชำระ: ${ParcelPaymentMethod.getLabel(shopOrder?.parcelPayment?.paymentMethod)}`,
           `ชื่อผู้รับ: ${shopOrder?.buyerShippingAddress?.name ?? "-"}`,
           `เบอร์โทรผู้รับ: ${shopOrder?.buyerShippingAddress?.phone ?? "-"}`,
           `ที่อยู่จัดส่ง: ${shopOrder?.buyerShippingAddress?.address ?? "-"}`,
-          "ผู้ซื้อแนบสลิปการชำระเงินแล้ว กรุณาตรวจสอบข้อมูลและยืนยันคำสั่งซื้อ",
+          shopOrder?.parcelPayment?.receiptImageUrl
+            ? "ผู้ซื้อแนบสลิปการชำระเงินแล้ว กรุณาตรวจสอบข้อมูลและยืนยันคำสั่งซื้อ"
+            : "ผู้ซื้อเลือกเก็บเงินปลายทาง (ไม่ใช้ใบเสร็จ) กรุณาตรวจสอบข้อมูลและยืนยันคำสั่งซื้อ",
           "รายการสินค้า:",
           itemSummary,
         ].join("\n"),

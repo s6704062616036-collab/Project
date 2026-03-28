@@ -1,3 +1,5 @@
+import { ParcelPaymentMethod } from "./ParcelPaymentMethod";
+
 const safeText = (value) => `${value ?? ""}`.trim();
 const ensureArray = (value) => (Array.isArray(value) ? value : value == null ? [] : [value]);
 const isObject = (value) => Boolean(value && typeof value === "object" && !Array.isArray(value));
@@ -121,6 +123,17 @@ const QR_CODE_PATHS = [
   ["paymentVerification", "qrCodeUrl"],
 ];
 
+const PAYMENT_METHOD_PATHS = [
+  ["paymentMethod"],
+  ["parcelPaymentMethod"],
+  ["payment", "paymentMethod"],
+  ["payment", "method"],
+  ["parcelPayment", "paymentMethod"],
+  ["parcelPayment", "method"],
+  ["paymentVerification", "paymentMethod"],
+  ["paymentVerification", "method"],
+];
+
 const SUBMITTED_AT_PATHS = [
   ["submittedAt"],
   ["uploadedAt"],
@@ -178,6 +191,7 @@ export class ParcelPaymentRecord {
     submittedAt,
     verifiedAt,
     verifiedBy,
+    paymentMethod,
   } = {}) {
     this.qrCodeUrl = safeText(qrCodeUrl);
     this.receiptImageUrl = safeText(receiptImageUrl);
@@ -185,6 +199,9 @@ export class ParcelPaymentRecord {
     this.submittedAt = safeText(submittedAt);
     this.verifiedAt = safeText(verifiedAt);
     this.verifiedBy = safeText(verifiedBy);
+    this.paymentMethod = safeText(paymentMethod)
+      ? ParcelPaymentMethod.normalize(paymentMethod)
+      : "";
   }
 
   static normalizeStatus(value) {
@@ -234,6 +251,10 @@ export class ParcelPaymentRecord {
       return "reported_to_admin";
     }
 
+    if (["cancelled", "canceled", "cancel"].includes(normalized)) {
+      return "cancelled";
+    }
+
     if (["completed", "delivered"].includes(normalized)) {
       return "completed";
     }
@@ -254,6 +275,7 @@ export class ParcelPaymentRecord {
     if (!normalizedStatuses.length) return "";
     if (normalizedStatuses.includes("reported_to_admin")) return "reported_to_admin";
     if (normalizedStatuses.includes("rejected_by_buyer")) return "rejected_by_buyer";
+    if (normalizedStatuses.includes("cancelled")) return "cancelled";
     if (normalizedStatuses.includes("completed")) return "completed";
     if (normalizedStatuses.includes("awaiting_parcel_pickup")) return "awaiting_parcel_pickup";
     if (normalizedStatuses.includes("pending_payment_verification")) return "pending_payment_verification";
@@ -268,6 +290,7 @@ export class ParcelPaymentRecord {
       shippingMethod === "parcel" ||
       Boolean(pickFirstDefined(source, RECEIPT_IMAGE_PATHS)) ||
       Boolean(pickFirstDefined(source, QR_CODE_PATHS)) ||
+      Boolean(pickFirstDefined(source, PAYMENT_METHOD_PATHS)) ||
       Boolean(pickDefinedValues(source, PARCEL_HINT_STATUS_PATHS).length) ||
       Boolean(pickFirstDefined(source, PAYMENT_OBJECT_PATHS))
     );
@@ -282,6 +305,7 @@ export class ParcelPaymentRecord {
     const record = new ParcelPaymentRecord({
       qrCodeUrl: pickFirstDefined(source, QR_CODE_PATHS),
       receiptImageUrl: pickFirstDefined(source, RECEIPT_IMAGE_PATHS),
+      paymentMethod: pickFirstDefined(source, PAYMENT_METHOD_PATHS),
       status: ParcelPaymentRecord.resolveWorkflowStatus(
         pickDefinedValues(source, PARCEL_STATUS_PATHS),
       ),
@@ -297,10 +321,37 @@ export class ParcelPaymentRecord {
     return Boolean(this.receiptImageUrl);
   }
 
+  getPaymentMethod() {
+    return this.paymentMethod
+      ? ParcelPaymentMethod.normalize(this.paymentMethod)
+      : ParcelPaymentMethod.QR_CODE;
+  }
+
+  isCashOnDelivery() {
+    return ParcelPaymentMethod.isCashOnDelivery(this.getPaymentMethod());
+  }
+
+  requiresReceipt() {
+    return ParcelPaymentMethod.requiresReceipt(this.getPaymentMethod());
+  }
+
+  requiresSellerQrCode() {
+    return ParcelPaymentMethod.requiresSellerQrCode(this.getPaymentMethod());
+  }
+
+  getPaymentMethodLabel() {
+    return ParcelPaymentMethod.getLabel(this.getPaymentMethod());
+  }
+
+  getPendingReviewLabel() {
+    return this.requiresReceipt() ? "รอตรวจสอบสลิป" : "รอตรวจสอบคำสั่งซื้อ";
+  }
+
   hasAnyData() {
     return Boolean(
       this.qrCodeUrl ||
         this.receiptImageUrl ||
+        this.paymentMethod ||
         this.status ||
         this.submittedAt ||
         this.verifiedAt ||

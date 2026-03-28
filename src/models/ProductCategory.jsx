@@ -1,7 +1,7 @@
 export class ProductCategory {
   static ALL = "__all__";
 
-  static #categories = [
+  static #defaultCategories = [
     "ของเล่น",
     "หนังสือ",
     "เครื่องใช้ไฟฟ้า",
@@ -11,6 +11,38 @@ export class ProductCategory {
     "อะไหล่รถยนต์",
     "อื่นๆ",
   ];
+
+  static #categories = [...ProductCategory.#defaultCategories];
+
+  static normalize(category) {
+    return `${category ?? ""}`.trim();
+  }
+
+  static defaultList() {
+    return [...ProductCategory.#defaultCategories];
+  }
+
+  static setAvailableCategories(categories = []) {
+    const normalized = [...new Set(
+      (Array.isArray(categories) ? categories : [])
+        .map((category) => ProductCategory.normalize(category))
+        .filter(Boolean),
+    )];
+
+    ProductCategory.#categories = normalized.length
+      ? normalized
+      : [...ProductCategory.#defaultCategories];
+
+    return ProductCategory.list();
+  }
+
+  static hydrateFromRecords(records = []) {
+    return ProductCategory.setAvailableCategories(
+      (Array.isArray(records) ? records : []).map((record) =>
+        typeof record === "string" ? record : record?.name,
+      ),
+    );
+  }
 
   static list() {
     return [...ProductCategory.#categories];
@@ -25,17 +57,14 @@ export class ProductCategory {
   }
 
   static isValid(category) {
-    return ProductCategory.#categories.includes(category);
-  }
-
-  static normalize(category) {
-    if (ProductCategory.isValid(category)) return category;
-    return "";
+    const normalized = ProductCategory.normalize(category);
+    return Boolean(normalized) && ProductCategory.#categories.includes(normalized);
   }
 
   static getLabel(category) {
     if (ProductCategory.isAll(category)) return "ทั้งหมด";
-    if (ProductCategory.isValid(category)) return category;
+    const normalized = ProductCategory.normalize(category);
+    if (normalized) return normalized;
     return "ไม่ระบุหมวดหมู่";
   }
 }

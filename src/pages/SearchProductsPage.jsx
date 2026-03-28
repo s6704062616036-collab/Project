@@ -353,7 +353,7 @@ export class SearchProductsPage extends React.Component {
               onClick={this.openCartPopup}
               title="ตะกร้า"
             >
-              🛒
+              <img src="/cart.svg" alt="ตะกร้า" className="h-5 w-5 object-contain" />
             </button>
 
             <button
@@ -361,7 +361,7 @@ export class SearchProductsPage extends React.Component {
               onClick={() => this.props.onGoChat?.()}
               title="แชท"
             >
-              💬
+              <img src="/chat.svg" alt="แชท" className="h-5 w-5 object-contain" />
             </button>
 
             <button
@@ -369,7 +369,7 @@ export class SearchProductsPage extends React.Component {
               onClick={this.openProfilePopup}
               title="บัญชี"
             >
-              👤
+              <img src="/account.svg" alt="บัญชี" className="h-5 w-5 object-contain" />
             </button>
           </div>
         </div>

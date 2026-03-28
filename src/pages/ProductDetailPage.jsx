@@ -4,6 +4,8 @@ import { ProductCategory } from "../models/ProductCategory";
 import { MyShopService } from "../services/MyShopService";
 import { CartService } from "../services/CartService";
 import { ChatService } from "../services/ChatService";
+import { ContentReportService } from "../services/ContentReportService";
+import { ContentReportModal } from "../components/ContentReportModal";
 import { CartPopup, ProfilePopup } from "../components/HeaderActionPopups";
 
 export class ProductDetailPage extends React.Component {
@@ -25,11 +27,16 @@ export class ProductDetailPage extends React.Component {
     cartDone: "",
     cartItems: [],
     checkingOut: false,
+    showReportModal: false,
+    reportReason: "",
+    reportSubmitting: false,
+    reportError: "",
   };
 
   myShopService = MyShopService.instance();
   cartService = CartService.instance();
   chatService = ChatService.instance();
+  contentReportService = ContentReportService.instance();
   galleryViewportRef = React.createRef();
   galleryPointerState = {
     pointerId: null,
@@ -228,8 +235,14 @@ export class ProductDetailPage extends React.Component {
 
   onAddToCart = async () => {
     const product = this.getResolvedProduct();
+    const currentUserId = `${this.props.user?.id ?? ""}`.trim();
+    const ownerId = `${product?.ownerId ?? ""}`.trim();
     if (!product?.id) {
       this.setState({ actionError: "ไม่พบรหัสสินค้า จึงยังเพิ่มลงตะกร้าไม่ได้", actionDone: "" });
+      return;
+    }
+    if (currentUserId && ownerId && currentUserId === ownerId) {
+      this.setState({ actionError: "ไม่สามารถเพิ่มสินค้าของร้านตัวเองลงตะกร้าได้", actionDone: "" });
       return;
     }
     if (product?.isSold?.()) {
@@ -295,6 +308,73 @@ export class ProductDetailPage extends React.Component {
           this.props.onGoChat?.({ chatId: nextChatId });
         }
       });
+    }
+  };
+
+  onOpenSellerProfile = () => {
+    const product = this.getResolvedProduct();
+    const ownerId = `${product?.ownerId ?? ""}`.trim();
+
+    if (!ownerId) {
+      this.setState({ actionError: "ไม่พบข้อมูลร้านค้าของผู้ขาย", actionDone: "" });
+      return;
+    }
+
+    this.props.onOpenSellerProfile?.(ownerId);
+  };
+
+  openReportModal = () => {
+    this.setState({
+      showReportModal: true,
+      reportReason: "",
+      reportError: "",
+    });
+  };
+
+  closeReportModal = () => {
+    this.setState({
+      showReportModal: false,
+      reportReason: "",
+      reportError: "",
+      reportSubmitting: false,
+    });
+  };
+
+  onChangeReportReason = (reportReason) => {
+    this.setState({ reportReason, reportError: "" });
+  };
+
+  submitProductReport = async () => {
+    const product = this.getResolvedProduct();
+    const productId = `${product?.id ?? ""}`.trim();
+    const reason = `${this.state.reportReason ?? ""}`.trim();
+
+    if (!productId) {
+      this.setState({ reportError: "ไม่พบสินค้าที่ต้องการรายงาน" });
+      return;
+    }
+    if (!reason) {
+      this.setState({ reportError: "กรุณาระบุปัญหาของสินค้าที่ต้องการรายงาน" });
+      return;
+    }
+
+    this.setState({ reportSubmitting: true, reportError: "", actionError: "", actionDone: "" });
+    try {
+      const result = await this.contentReportService.submitProductReport({
+        productId,
+        reason,
+      });
+      this.setState({
+        showReportModal: false,
+        reportReason: "",
+        actionDone: result?.message ?? "ส่งรายงานสินค้าไปให้ผู้ดูแลระบบแล้ว",
+      });
+    } catch (e) {
+      this.setState({
+        reportError: e?.message ?? "ส่งรายงานสินค้าไม่สำเร็จ",
+      });
+    } finally {
+      this.setState({ reportSubmitting: false });
     }
   };
 
@@ -411,6 +491,10 @@ export class ProductDetailPage extends React.Component {
       checkingOut,
       activeImageIndex,
       isDraggingGallery,
+      showReportModal,
+      reportReason,
+      reportSubmitting,
+      reportError,
     } = this.state;
     const product = this.getResolvedProduct();
     const imageUrls = product.getImageUrls();
@@ -421,6 +505,13 @@ export class ProductDetailPage extends React.Component {
     const hasProductData = Boolean(product?.id || product?.name);
     const cartTotalLabel = this.getCartTotalLabel();
     const isSold = product?.isSold?.() ?? false;
+    const isOwnProduct =
+      `${this.props.user?.id ?? ""}`.trim() &&
+      `${product?.ownerId ?? ""}`.trim() &&
+      `${this.props.user?.id ?? ""}`.trim() === `${product?.ownerId ?? ""}`.trim();
+    const sellerName = product?.getShopDisplayName?.() ?? "ร้านค้าผู้ขาย";
+    const sellerAvatarUrl = `${product?.shopAvatarUrl ?? ""}`.trim();
+    const canOpenSellerProfile = Boolean(`${product?.ownerId ?? ""}`.trim());
 
     return (
       <div className="min-h-dvh bg-zinc-50">
@@ -452,7 +543,7 @@ export class ProductDetailPage extends React.Component {
               onClick={this.openCartPopup}
               title="ตะกร้า"
             >
-              🛒
+              <img src="/cart.svg" alt="ตะกร้า" className="h-5 w-5 object-contain" />
             </button>
 
             <button
@@ -460,7 +551,7 @@ export class ProductDetailPage extends React.Component {
               onClick={() => this.props.onGoChat?.()}
               title="แชท"
             >
-              💬
+              <img src="/chat.svg" alt="แชท" className="h-5 w-5 object-contain" />
             </button>
 
             <button
@@ -468,7 +559,7 @@ export class ProductDetailPage extends React.Component {
               onClick={this.openProfilePopup}
               title="บัญชี"
             >
-              👤
+              <img src="/account.svg" alt="บัญชี" className="h-5 w-5 object-contain" />
             </button>
           </div>
         </div>
@@ -571,8 +662,18 @@ export class ProductDetailPage extends React.Component {
                 </div>
 
                 <div className="space-y-3">
-                  <div className="text-2xl font-semibold text-zinc-900 break-words">
-                    {product?.name || "ไม่ระบุชื่อสินค้า"}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="text-2xl font-semibold text-zinc-900 break-words">
+                      {product?.name || "ไม่ระบุชื่อสินค้า"}
+                    </div>
+                    <button
+                      type="button"
+                      className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-zinc-200 bg-white hover:bg-zinc-50"
+                      onClick={this.openReportModal}
+                      title="รายงานสินค้า"
+                    >
+                      <img src="/report.svg" alt="รายงานสินค้า" className="h-5 w-5" />
+                    </button>
                   </div>
                   <div
                     className={`inline-flex w-fit rounded-full px-2.5 py-1 text-xs font-semibold ${
@@ -582,6 +683,37 @@ export class ProductDetailPage extends React.Component {
                     {product?.getSaleStatusLabel?.() ?? "พร้อมขาย"}
                   </div>
                   <div className="text-xl font-semibold text-zinc-800">{product?.getPriceLabel?.() ?? "฿0.00"}</div>
+                  <button
+                    type="button"
+                    className="flex w-full max-w-md items-center gap-3 rounded-2xl border border-zinc-200 bg-zinc-50 p-3 text-left transition hover:border-zinc-300 hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+                    onClick={this.onOpenSellerProfile}
+                    disabled={!canOpenSellerProfile}
+                  >
+                    <div className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-full bg-white">
+                      {sellerAvatarUrl ? (
+                        <img
+                          src={sellerAvatarUrl}
+                          alt={sellerName}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <span className="text-sm font-semibold text-zinc-500">
+                          {(sellerName ?? "ร").trim().charAt(0) || "ร"}
+                        </span>
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-xs font-medium uppercase tracking-[0.12em] text-zinc-500">
+                        Seller Profile
+                      </div>
+                      <div className="truncate text-base font-semibold text-zinc-900">
+                        {sellerName}
+                      </div>
+                      <div className="text-sm text-zinc-500">
+                        กดเพื่อดูโปรไฟล์ร้านและสินค้าที่ลงขาย
+                      </div>
+                    </div>
+                  </button>
                   {exchangeItem ? (
                     <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-zinc-700 break-words">
                       ต้องการแลกกับ: <span className="font-medium text-zinc-900">{exchangeItem}</span>
@@ -601,9 +733,15 @@ export class ProductDetailPage extends React.Component {
                       type="button"
                       className="rounded-xl bg-zinc-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
                       onClick={this.onAddToCart}
-                      disabled={addingToCart || isSold}
+                      disabled={addingToCart || isSold || isOwnProduct}
                     >
-                      {addingToCart ? "กำลังเพิ่ม..." : isSold ? "ขายออกแล้ว" : "เพิ่มลงตะกร้า"}
+                      {addingToCart
+                        ? "กำลังเพิ่ม..."
+                        : isOwnProduct
+                          ? "สินค้าของคุณ"
+                          : isSold
+                            ? "ขายออกแล้ว"
+                            : "เพิ่มลงตะกร้า"}
                     </button>
                   </div>
 
@@ -642,6 +780,19 @@ export class ProductDetailPage extends React.Component {
             onGoMyShop={this.goMyShop}
             onGoMyOrders={this.goMyOrders}
             onLogout={this.props.onLogout}
+          />
+        ) : null}
+
+        {showReportModal ? (
+          <ContentReportModal
+            title="รายงานสินค้า"
+            subjectLabel={product?.name || "ไม่ระบุชื่อสินค้า"}
+            reason={reportReason}
+            submitting={reportSubmitting}
+            error={reportError}
+            onClose={this.closeReportModal}
+            onChangeReason={this.onChangeReportReason}
+            onSubmit={this.submitProductReport}
           />
         ) : null}
       </div>

@@ -8,6 +8,9 @@ export class ShopProduct {
   constructor({
     id,
     ownerId,
+    shopId,
+    shopName,
+    shopAvatarUrl,
     name,
     category,
     imageUrl,
@@ -27,6 +30,9 @@ export class ShopProduct {
 
     this.id = id ?? "";
     this.ownerId = ownerId ?? "";
+    this.shopId = shopId ?? "";
+    this.shopName = shopName ?? "";
+    this.shopAvatarUrl = shopAvatarUrl ?? "";
     this.name = name ?? "";
     this.category = ProductCategory.normalize(category);
     this.imageUrl = normalizedImageUrls[0] ?? "";
@@ -90,6 +96,22 @@ export class ShopProduct {
     return new ShopProduct({
       id: json?.id ?? json?._id,
       ownerId: json?.ownerId,
+      shopId:
+        json?.shopId ??
+        json?.shop?.id ??
+        json?.shopProfile?.id ??
+        json?.seller?.shopId,
+      shopName:
+        json?.shopName ??
+        json?.shop?.shopName ??
+        json?.shopProfile?.shopName ??
+        json?.shop?.name ??
+        json?.seller?.shopName,
+      shopAvatarUrl:
+        json?.shopAvatarUrl ??
+        json?.shop?.avatarUrl ??
+        json?.shopProfile?.avatarUrl ??
+        json?.seller?.avatarUrl,
       name: json?.name ?? json?.productName,
       category: json?.category ?? json?.productCategory ?? json?.categoryName,
       imageUrl,
@@ -136,6 +158,10 @@ export class ShopProduct {
   getImageUrls() {
     if (Array.isArray(this.imageUrls) && this.imageUrls.length) return this.imageUrls;
     return this.imageUrl ? [this.imageUrl] : [];
+  }
+
+  getShopDisplayName() {
+    return `${this.shopName ?? ""}`.trim() || "ร้านค้าผู้ขาย";
   }
 
   isSold() {

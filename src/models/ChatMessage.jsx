@@ -104,6 +104,8 @@ export class ChatMessage {
         return "คนขายเสนอเปลี่ยนสถานที่";
       case "cancelled_by_seller":
         return "ยกเลิกการนัดรับ";
+      case "rejected_by_buyer":
+        return "ผู้ซื้อยกเลิกคำสั่งซื้อ";
       default:
         return this.getMeetupProposalStatus() || "ข้อเสนอนัดรับ";
     }

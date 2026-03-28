@@ -6,6 +6,8 @@ const getStatusBadgeClassName = (status) => {
       return "border-sky-200 bg-sky-50 text-sky-700";
     case "reported_to_admin":
       return "border-rose-200 bg-rose-50 text-rose-700";
+    case "cancelled":
+      return "border-red-200 bg-red-50 text-red-700";
     case "completed":
       return "border-emerald-200 bg-emerald-50 text-emerald-700";
     case "rejected_by_buyer":
@@ -26,7 +28,7 @@ export class ShopParcelPaymentVerificationPanel extends React.Component {
           <div>
             <div className="text-base font-semibold text-zinc-900">ตรวจสอบการชำระเงิน</div>
             <div className="text-sm text-zinc-500">
-              โครงสำหรับคำสั่งซื้อแบบส่งพัสดุที่ผู้ซื้อแนบใบเสร็จเข้ามาให้ร้านค้าตรวจสอบ
+              โครงสำหรับคำสั่งซื้อแบบส่งพัสดุที่ร้านค้าต้องตรวจสอบก่อนยืนยัน ทั้ง QR code และเก็บเงินปลายทาง
             </div>
           </div>
           <button
@@ -72,6 +74,9 @@ export class ShopParcelPaymentVerificationPanel extends React.Component {
                   <div className="rounded-xl bg-zinc-50 px-3 py-2">
                     ส่งข้อมูลเมื่อ: {review.getSubmittedAtLabel?.() ?? "-"}
                   </div>
+                  <div className="rounded-xl bg-zinc-50 px-3 py-2 sm:col-span-2">
+                    วิธีชำระ: {review.getPaymentMethodLabel?.() ?? "ชำระเงินด้วย QR code"}
+                  </div>
                 </div>
 
                 <div className="rounded-xl bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
@@ -80,15 +85,17 @@ export class ShopParcelPaymentVerificationPanel extends React.Component {
 
                 <div className="flex items-center justify-between gap-3">
                   <div className="text-xs text-zinc-500">
-                    {review.hasAdminReport?.()
+                    {review.isCancelled?.()
+                      ? "คำสั่งซื้อนี้ถูกยกเลิกแล้ว"
+                      : review.hasAdminReport?.()
                       ? "มีการรายงานไปยัง Admin แล้ว"
                       : review.canReview?.()
-                        ? "พร้อมตรวจสอบสลิปการชำระ"
+                        ? review.getReviewHintLabel?.() ?? "พร้อมตรวจสอบการชำระ"
                         : "ดูรายละเอียดคำสั่งซื้อได้จาก popup"}
                   </div>
                   <button
                     type="button"
-                    className="rounded-xl bg-zinc-900 px-4 py-2 text-sm font-semibold text-white"
+                    className="rounded-xl bg-[#F4D03E] px-4 py-2 text-sm font-semibold text-black"
                     onClick={() => onOpenReview?.(review)}
                   >
                     ตรวจสอบการชำระ
@@ -105,7 +112,7 @@ export class ShopParcelPaymentVerificationPanel extends React.Component {
 
 export class ShopParcelPaymentVerificationModal extends React.Component {
   state = {
-    reportNote: "",
+    decisionNote: "",
   };
 
   componentDidMount() {
@@ -123,7 +130,7 @@ export class ShopParcelPaymentVerificationModal extends React.Component {
 
   syncStateFromReview(review) {
     this.setState({
-      reportNote: review?.adminReport?.reason ?? "",
+      decisionNote: review?.adminReport?.reason ?? "",
     });
   }
 
@@ -131,20 +138,20 @@ export class ShopParcelPaymentVerificationModal extends React.Component {
     event.stopPropagation();
   };
 
-  setReportNote = (event) => {
-    this.setState({ reportNote: event.target.value });
+  setDecisionNote = (event) => {
+    this.setState({ decisionNote: event.target.value });
   };
 
   submitAction = (action) => {
     this.props.onSubmitDecision?.({
       action,
-      note: this.state.reportNote,
+      note: this.state.decisionNote,
     });
   };
 
   render() {
     const { review, submitting, error, onClose } = this.props;
-    const { reportNote } = this.state;
+    const { decisionNote } = this.state;
 
     if (!review) return null;
 
@@ -176,6 +183,12 @@ export class ShopParcelPaymentVerificationModal extends React.Component {
               <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>
             ) : null}
 
+            {review.isCancelled?.() ? (
+              <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+                คำสั่งซื้อนี้ถูกยกเลิกแล้ว
+              </div>
+            ) : null}
+
             {review.hasAdminReport?.() ? (
               <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
                 รายการนี้ถูกส่งให้ Admin ตรวจสอบแล้ว
@@ -183,7 +196,7 @@ export class ShopParcelPaymentVerificationModal extends React.Component {
               </div>
             ) : null}
 
-            {!review.canReview?.() && !review.hasAdminReport?.() ? (
+            {!review.canReview?.() && !review.hasAdminReport?.() && !review.isCancelled?.() ? (
               <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-800">
                 คำสั่งซื้อนี้ผ่านการตรวจสอบแล้ว และอยู่ในสถานะ {review.getStatusLabel?.() ?? "รอดำเนินการ"}
               </div>
@@ -200,7 +213,7 @@ export class ShopParcelPaymentVerificationModal extends React.Component {
                     </div>
                   </div>
                   <div className="text-xs text-zinc-500">
-                    ส่งใบเสร็จเมื่อ {review.getSubmittedAtLabel?.() ?? "-"}
+                    ส่งข้อมูลเมื่อ {review.getSubmittedAtLabel?.() ?? "-"}
                   </div>
                 </section>
 
@@ -240,23 +253,26 @@ export class ShopParcelPaymentVerificationModal extends React.Component {
                 </section>
 
                 <section className="rounded-2xl bg-zinc-50 p-4 space-y-2">
-                  <div className="text-sm font-semibold text-zinc-900">หมายเหตุสำหรับรายงาน Admin</div>
+                  <div className="text-sm font-semibold text-zinc-900">หมายเหตุสำหรับการยกเลิกคำสั่งซื้อ</div>
                   <textarea
                     className="min-h-28 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none disabled:bg-zinc-100"
-                    placeholder="เช่น สลิปตัดต่อ, ยอดเงินไม่ตรง, ชื่อบัญชีไม่ตรง หรือข้อมูลผิดปกติอื่นๆ"
-                    value={reportNote}
-                    onChange={this.setReportNote}
+                    placeholder="เช่น ยอดเงินไม่ตรง ข้อมูลจัดส่งไม่ครบ หรือไม่สามารถยืนยันคำสั่งซื้อได้"
+                    value={decisionNote}
+                    onChange={this.setDecisionNote}
                     disabled={submitting || !review.canReview?.()}
                   />
                   <div className="text-xs text-zinc-500">
-                    ส่วนนี้เป็นโครงสำหรับเก็บเหตุผลลงฐานข้อมูลและส่งต่อให้ Admin ตรวจสอบภายหลัง
+                    ส่วนนี้ใช้บันทึกเหตุผลประกอบการยกเลิกคำสั่งซื้อ
                   </div>
                 </section>
               </div>
 
               <div className="space-y-4">
                 <section className="rounded-2xl bg-zinc-50 p-4 space-y-3">
-                  <div className="text-sm font-semibold text-zinc-900">ใบเสร็จที่ผู้ซื้ออัปโหลด</div>
+                  <div className="text-sm font-semibold text-zinc-900">วิธีชำระและหลักฐานจากผู้ซื้อ</div>
+                  <div className="rounded-xl border border-zinc-200 bg-white p-3 text-sm text-zinc-700">
+                    {review.getPaymentMethodLabel?.() ?? "ชำระเงินด้วย QR code"}
+                  </div>
                   {review.hasReceipt?.() ? (
                     <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white">
                       <img
@@ -267,25 +283,23 @@ export class ShopParcelPaymentVerificationModal extends React.Component {
                     </div>
                   ) : (
                     <div className="rounded-xl border border-dashed border-zinc-300 bg-white p-6 text-center text-sm text-zinc-500">
-                      ไม่พบรูปใบเสร็จ
+                      {review.isCashOnDelivery?.()
+                        ? "รายการนี้เป็นเก็บเงินปลายทาง จึงไม่มีใบเสร็จแนบ"
+                        : "ไม่พบรูปใบเสร็จ"}
                     </div>
                   )}
                 </section>
 
                 <section className="rounded-2xl border border-zinc-200 bg-white p-4 space-y-3">
                   <div className="text-sm font-semibold text-zinc-900">การดำเนินการ</div>
-                  <div className="text-sm text-zinc-600">
-                    ปุ่มยืนยันจะอนุมัติคำสั่งซื้อและเปลี่ยนสถานะเป็นรอรับพัสดุ ส่วนปุ่มรายงานจะเก็บเหตุผลและส่งต่อให้ Admin
-                  </div>
-
                   <div className="flex flex-col gap-2">
                     <button
                       type="button"
                       className="rounded-xl border border-rose-200 px-4 py-2.5 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-60"
-                      onClick={() => this.submitAction("report")}
+                      onClick={() => this.submitAction("cancel")}
                       disabled={submitting || !review.canReview?.()}
                     >
-                      {submitting ? "กำลังบันทึก..." : "รายงาน Admin"}
+                      {submitting ? "กำลังบันทึก..." : "ยกเลิกการสั่งซื้อ"}
                     </button>
                     <button
                       type="button"

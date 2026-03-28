@@ -18,12 +18,14 @@ export class LoginPage extends React.Component {
 
   validate() {
     const { identifier, password } = this.state;
+    const normalizedIdentifier = identifier.trim();
 
-    // โครง: รองรับทั้ง email หรือ phone (เช็คง่าย ๆ)
-    const isPhone = /^[0-9+\- ]{8,}$/.test(identifier.trim());
-    const isValidEmail = isEmail(identifier);
+    const isPhone = /^[0-9+\- ]{8,}$/.test(normalizedIdentifier);
+    const isValidEmail = isEmail(normalizedIdentifier);
+    const isUsername = /^[a-zA-Z0-9._-]{3,}$/.test(normalizedIdentifier);
 
-    if (!isPhone && !isValidEmail) return "กรุณากรอกอีเมลหรือเบอร์โทรให้ถูกต้อง";
+    if (!normalizedIdentifier) return "กรุณากรอกข้อมูลเข้าสู่ระบบ";
+    if (!isPhone && !isValidEmail && !isUsername) return "กรุณากรอกข้อมูลเข้าสู่ระบบให้ถูกต้อง";
     if (!minLen(password, 6)) return "รหัสผ่านอย่างน้อย 6 ตัวอักษร";
     return "";
   }
@@ -35,9 +37,8 @@ export class LoginPage extends React.Component {
 
     this.setState({ loading: true, error: "" });
     try {
-      // โครง: ส่ง identifier ไป backend ให้ backend ตัดสินว่าเป็น email หรือ phone
       const { user } = await this.auth.login({
-        email: this.state.identifier, // หรือใช้ key ชื่อ identifier ก็ได้ แล้วแต่ backend
+        email: this.state.identifier,
         password: this.state.password,
       });
 

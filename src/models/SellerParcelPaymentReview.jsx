@@ -1,4 +1,5 @@
 import { ParcelPaymentRecord } from "./ParcelPaymentRecord";
+import { ParcelPaymentMethod } from "./ParcelPaymentMethod";
 
 const safeText = (value) => `${value ?? ""}`.trim();
 const toNumber = (value, fallback = 0) => {
@@ -76,6 +77,7 @@ export class SellerParcelPaymentReview {
     createdAt,
     submittedAt,
     receiptImageUrl,
+    paymentMethod,
     buyerShippingAddress,
     adminReport,
   } = {}) {
@@ -100,6 +102,9 @@ export class SellerParcelPaymentReview {
     this.createdAt = safeText(createdAt);
     this.submittedAt = safeText(submittedAt) || this.createdAt;
     this.receiptImageUrl = safeText(receiptImageUrl);
+    this.paymentMethod = safeText(paymentMethod)
+      ? ParcelPaymentMethod.normalize(paymentMethod)
+      : "";
     this.buyerShippingAddress = buyerShippingAddress
       ? {
           name: safeText(buyerShippingAddress.name),
@@ -149,6 +154,7 @@ export class SellerParcelPaymentReview {
       createdAt: json?.createdAt ?? json?.order?.createdAt,
       submittedAt: json?.submittedAt ?? parcelPayment?.submittedAt ?? json?.updatedAt,
       receiptImageUrl: parcelPayment?.receiptImageUrl,
+      paymentMethod: parcelPayment?.getPaymentMethod?.() ?? json?.paymentMethod,
       buyerShippingAddress,
       adminReport: json?.adminReport ?? json?.report,
     });
@@ -218,12 +224,40 @@ export class SellerParcelPaymentReview {
     return Boolean(this.receiptImageUrl);
   }
 
+  getPaymentMethod() {
+    return this.paymentMethod
+      ? ParcelPaymentMethod.normalize(this.paymentMethod)
+      : ParcelPaymentMethod.QR_CODE;
+  }
+
+  requiresReceipt() {
+    return ParcelPaymentMethod.requiresReceipt(this.getPaymentMethod());
+  }
+
+  isCashOnDelivery() {
+    return ParcelPaymentMethod.isCashOnDelivery(this.getPaymentMethod());
+  }
+
+  getPaymentMethodLabel() {
+    return ParcelPaymentMethod.getLabel(this.getPaymentMethod());
+  }
+
+  getReviewHintLabel() {
+    return this.requiresReceipt()
+      ? "พร้อมตรวจสอบสลิปการชำระ"
+      : "พร้อมตรวจสอบคำสั่งซื้อเก็บเงินปลายทาง";
+  }
+
   canReview() {
     return this.getEffectiveStatus() === "pending_payment_verification";
   }
 
   hasAdminReport() {
     return Boolean(this.adminReport?.reportId) || this.getEffectiveStatus() === "reported_to_admin";
+  }
+
+  isCancelled() {
+    return this.getEffectiveStatus() === "cancelled";
   }
 
   getEffectiveStatus() {
@@ -234,11 +268,13 @@ export class SellerParcelPaymentReview {
     switch (this.getEffectiveStatus()) {
       case "pending_payment_verification":
       case "pending_seller_confirmation":
-        return "รอตรวจสอบการชำระ";
+        return this.requiresReceipt() ? "รอตรวจสอบการชำระ" : "รอตรวจสอบคำสั่งซื้อ";
       case "awaiting_parcel_pickup":
         return "รอรับพัสดุ";
       case "reported_to_admin":
         return "ส่งให้ Admin ตรวจสอบ";
+      case "cancelled":
+        return "ยกเลิกคำสั่งซื้อ";
       case "completed":
         return "เสร็จสิ้น";
       case "rejected_by_buyer":

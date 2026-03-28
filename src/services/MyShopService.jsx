@@ -25,6 +25,47 @@ const pickArray = (source, paths = []) => {
   return Array.isArray(value) ? value : [];
 };
 
+const extractShopPayload = (payload) =>
+  pickFirstDefined(payload, [
+    ["shop"],
+    ["shopProfile"],
+    ["merchant"],
+    ["data", "shop"],
+    ["data", "shopProfile"],
+    ["data", "merchant"],
+    ["result", "shop"],
+    ["result", "shopProfile"],
+    ["result", "merchant"],
+    ["data"],
+  ]);
+
+const extractMessage = (payload, fallbackMessage) =>
+  pickFirstDefined(payload, [
+    ["message"],
+    ["data", "message"],
+    ["meta", "message"],
+    ["result", "message"],
+  ]) ?? fallbackMessage;
+
+const buildShopUpsertPayload = (payload = {}, kycContext = {}) => {
+  const directSave = Boolean(kycContext?.directSave);
+  const citizenId = `${payload?.citizenId ?? ""}`.trim();
+
+  return {
+    ...(payload ?? {}),
+    kycCitizenId: citizenId,
+    submissionAction: directSave ? "save_shop_profile" : "submit_kyc_review",
+    requiresKycReview: !directSave,
+    kycSubmissionType: `${kycContext?.submissionType ?? (directSave ? "profile_update" : "initial_kyc")}`.trim(),
+    hasApprovedKycHistory: Boolean(kycContext?.hasApprovedKycHistory),
+    hasPendingSubmission: Boolean(kycContext?.hasPendingSubmission),
+    citizenIdLocked: Boolean(kycContext?.citizenIdLocked),
+    qrCodeChanged: Boolean(kycContext?.qrCodeChanged),
+    submissionChannel: "my_shop_page",
+    kycFlowVersion: "shop-kyc-v1",
+  };
+};
+
 const normalizeOrderPayload = (payload) => {
   if (!payload || typeof payload !== "object") return null;
 
@@ -65,6 +106,8 @@ const looksLikeParcelReviewPayload = (payload) =>
         payload?.paymentStatus ||
         payload?.reviewStatus ||
         payload?.verificationStatus ||
+        payload?.paymentMethod ||
+        payload?.parcelPayment?.paymentMethod ||
         `${payload?.shippingMethod ?? ""}`.trim().toLowerCase() === "parcel"
       ),
   );
@@ -169,33 +212,29 @@ export class MyShopService {
   // โครง backend: GET /api/myshop/me
   async me() {
     const result = await this.http.get("/api/myshop/me");
-    const shopPayload = pickFirstDefined(result, [
-      ["shop"],
-      ["data", "shop"],
-      ["data"],
-    ]);
+    const shopPayload = extractShopPayload(result);
     return { shop: shopPayload ? ShopProfile.fromJSON(shopPayload) : null };
   }
 
   // โครง backend: PUT /api/myshop/me (upsert ลง database)
-  async upsert(payload, { avatarFile = null, parcelQrFile = null } = {}) {
+  async upsert(payload, { avatarFile = null, parcelQrFile = null, kycContext = {} } = {}) {
+    const requestBody = buildShopUpsertPayload(payload, kycContext);
     const hasFiles = Boolean(avatarFile || parcelQrFile);
     if (!hasFiles) {
       const result = await this.http.request("/api/myshop/me", {
         method: "PUT",
-        body: payload,
+        body: requestBody,
       });
-      const shopPayload = pickFirstDefined(result, [
-        ["shop"],
-        ["data", "shop"],
-        ["data"],
-      ]);
-      return { shop: shopPayload ? ShopProfile.fromJSON(shopPayload) : null };
+      const shopPayload = extractShopPayload(result);
+      return {
+        shop: shopPayload ? ShopProfile.fromJSON(shopPayload) : null,
+        message: extractMessage(result, "อัปเดตข้อมูลร้านแล้ว"),
+      };
     }
 
     const formData = new FormData();
-    Object.entries(payload ?? {}).forEach(([key, value]) => {
-      formData.append(key, value ?? "");
+    Object.entries(requestBody).forEach(([key, value]) => {
+      formData.append(key, typeof value === "boolean" ? `${value}` : (value ?? ""));
     });
 
     if (avatarFile) {
@@ -204,18 +243,18 @@ export class MyShopService {
     if (parcelQrFile) {
       formData.append("parcelQrCode", parcelQrFile);
       formData.append("paymentQrCode", parcelQrFile);
+      formData.append("kycQrCode", parcelQrFile);
     }
 
     const result = await this.http.request("/api/myshop/me", {
       method: "PUT",
       body: formData,
     });
-    const shopPayload = pickFirstDefined(result, [
-      ["shop"],
-      ["data", "shop"],
-      ["data"],
-    ]);
-    return { shop: shopPayload ? ShopProfile.fromJSON(shopPayload) : null };
+    const shopPayload = extractShopPayload(result);
+    return {
+      shop: shopPayload ? ShopProfile.fromJSON(shopPayload) : null,
+      message: extractMessage(result, "อัปเดตข้อมูลร้านแล้ว"),
+    };
   }
 
   // โครง backend: GET /api/myshop/products (ดึงสินค้าที่ผู้ใช้ลงขายจาก database)
@@ -258,7 +297,10 @@ export class MyShopService {
     return { reviews: [] };
   }
 
-  // โครง backend: POST /api/myshop/parcel-payment-reviews/:orderId/shop-orders/:shopOrderKey/decision
+  // โครง backend:
+  // - POST /api/myshop/parcel-payment-reviews/:orderId/shop-orders/:shopOrderKey/decision
+  // - fallback: POST /api/myshop/orders/:orderId/shop-orders/:shopOrderKey/decision
+  // - fallback: POST /api/orders/:orderId/shop-orders/:shopOrderKey/decision?sellerView=1
   async updateParcelPaymentReviewDecision({ orderId, shopOrderKey, action, note, productIds, changedBy } = {}) {
     const normalizedOrderId = `${orderId ?? ""}`.trim();
     const normalizedShopOrderKey = `${shopOrderKey ?? ""}`.trim();
@@ -266,15 +308,25 @@ export class MyShopService {
     const normalizedNote = `${note ?? ""}`.trim();
     const normalizedChangedBy = `${changedBy ?? ""}`.trim();
     const decisionAt = new Date().toISOString();
-    const nextOrderStatus =
-      normalizedAction === "approve" ? "awaiting_parcel_pickup" : "reported_to_admin";
-    const nextParcelPaymentStatus =
-      normalizedAction === "approve" ? "approved" : "reported_to_admin";
+    let nextOrderStatus = "";
+    let nextParcelPaymentStatus = "";
     const normalizedProductIds = [...new Set(ensureArray(productIds).map((item) => `${item ?? ""}`.trim()).filter(Boolean))];
 
     if (!normalizedOrderId) throw new Error("ไม่พบ orderId");
     if (!normalizedShopOrderKey) throw new Error("ไม่พบ shopOrderKey");
     if (!normalizedAction) throw new Error("ไม่พบ action สำหรับตรวจสอบการชำระ");
+    if (normalizedAction === "approve") {
+      nextOrderStatus = "awaiting_parcel_pickup";
+      nextParcelPaymentStatus = "approved";
+    } else if (normalizedAction === "cancel") {
+      nextOrderStatus = "cancelled";
+      nextParcelPaymentStatus = "cancelled";
+    } else if (normalizedAction === "report") {
+      nextOrderStatus = "reported_to_admin";
+      nextParcelPaymentStatus = "reported_to_admin";
+    } else {
+      throw new Error("ไม่พบ action สำหรับตรวจสอบการชำระ");
+    }
 
     const syncRequest = normalizedProductIds.length
       ? ProductSaleSyncRequest.fromOrderMutation({
@@ -288,21 +340,37 @@ export class MyShopService {
         }).toPayload()
       : null;
 
-    const result = await this.http.post(
+    const requestBody = {
+      action: normalizedAction,
+      note: normalizedNote,
+      reason: normalizedNote,
+      decisionAt,
+      changedBy: normalizedChangedBy,
+      orderStatus: nextOrderStatus,
+      shopOrderStatus: nextOrderStatus,
+      parcelPaymentStatus: nextParcelPaymentStatus,
+      productIds: normalizedProductIds,
+      syncRequest,
+    };
+    const candidatePaths = [
       `/api/myshop/parcel-payment-reviews/${encodeURIComponent(normalizedOrderId)}/shop-orders/${encodeURIComponent(normalizedShopOrderKey)}/decision`,
-      {
-        action: normalizedAction,
-        note: normalizedNote,
-        reason: normalizedNote,
-        decisionAt,
-        changedBy: normalizedChangedBy,
-        orderStatus: nextOrderStatus,
-        shopOrderStatus: nextOrderStatus,
-        parcelPaymentStatus: nextParcelPaymentStatus,
-        productIds: normalizedProductIds,
-        syncRequest,
-      },
-    );
+      `/api/myshop/orders/${encodeURIComponent(normalizedOrderId)}/shop-orders/${encodeURIComponent(normalizedShopOrderKey)}/decision`,
+      `/api/orders/${encodeURIComponent(normalizedOrderId)}/shop-orders/${encodeURIComponent(normalizedShopOrderKey)}/decision?sellerView=1`,
+    ];
+    let lastError = null;
+    let result = null;
+
+    for (const path of candidatePaths) {
+      try {
+        result = await this.http.post(path, requestBody);
+        lastError = null;
+        break;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    if (lastError) throw lastError;
 
     return {
       review: buildReviewFromDecisionResult(result, normalizedShopOrderKey),

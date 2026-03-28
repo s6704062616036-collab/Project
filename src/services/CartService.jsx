@@ -15,9 +15,18 @@ export class CartService {
 
   buildCheckoutRequestBody(payload = {}) {
     const shopOrders = Array.isArray(payload?.shopOrders) ? payload.shopOrders : [];
+    const normalizedShopOrders = shopOrders.map((shopOrder) => {
+      const { receiptFile, ...rest } = shopOrder ?? {};
+      return rest;
+    });
     const hasReceiptFiles = shopOrders.some((shopOrder) => Boolean(shopOrder?.receiptFile));
 
-    if (!hasReceiptFiles) return payload;
+    if (!hasReceiptFiles) {
+      return {
+        ...(payload ?? {}),
+        shopOrders: normalizedShopOrders,
+      };
+    }
 
     const formData = new FormData();
     const serializedShopOrders = shopOrders.map((shopOrder, index) => {
@@ -28,10 +37,12 @@ export class CartService {
         formData.append(receiptFileKey, receiptFile);
       }
 
-      return {
-        ...rest,
-        receiptFileKey,
-      };
+      return receiptFileKey
+        ? {
+            ...rest,
+            receiptFileKey,
+          }
+        : rest;
     });
 
     formData.append("shopOrders", JSON.stringify(serializedShopOrders));
