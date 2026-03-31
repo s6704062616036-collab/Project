@@ -20,9 +20,9 @@ export class ContentReportModal extends React.Component {
     } = this.props;
 
     return (
-      <div className="fixed inset-0 z-[70] bg-black/40 p-4" onClick={onClose}>
+      <div className="app-modal-overlay fixed inset-0 z-[70] bg-black/40" onClick={onClose}>
         <form
-          className="mx-auto mt-[8dvh] w-full max-w-xl rounded-3xl bg-white p-4 shadow-xl md:p-6 space-y-4"
+          className="app-modal-card w-full max-w-xl rounded-3xl bg-white p-4 shadow-xl md:p-6 space-y-4"
           onClick={this.stop}
           onSubmit={this.onSubmit}
         >

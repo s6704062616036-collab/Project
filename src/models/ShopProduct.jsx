@@ -1,6 +1,17 @@
 import { ProductCategory } from "./ProductCategory";
 import { ProductSaleLifecycle } from "./ProductSaleLifecycle";
 
+const apiBaseUrl = `${import.meta.env.VITE_API_URL ?? ""}`.trim().replace(/\/+$/, "");
+
+const toAbsoluteApiUrl = (value) => {
+  const normalizedValue = `${value ?? ""}`.trim();
+  if (!normalizedValue) return "";
+  if (/^(?:https?:)?\/\//i.test(normalizedValue)) return normalizedValue;
+  if (normalizedValue.startsWith("blob:") || normalizedValue.startsWith("data:")) return normalizedValue;
+  if (normalizedValue.startsWith("/")) return apiBaseUrl ? `${apiBaseUrl}${normalizedValue}` : normalizedValue;
+  return normalizedValue;
+};
+
 export class ShopProduct {
   static AVAILABLE = ProductSaleLifecycle.AVAILABLE;
   static SOLD = ProductSaleLifecycle.SOLD;
@@ -32,7 +43,7 @@ export class ShopProduct {
     this.ownerId = ownerId ?? "";
     this.shopId = shopId ?? "";
     this.shopName = shopName ?? "";
-    this.shopAvatarUrl = shopAvatarUrl ?? "";
+    this.shopAvatarUrl = toAbsoluteApiUrl(shopAvatarUrl);
     this.name = name ?? "";
     this.category = ProductCategory.normalize(category);
     this.imageUrl = normalizedImageUrls[0] ?? "";
@@ -53,16 +64,17 @@ export class ShopProduct {
   static normalizeImageUrls({ imageUrl, imageUrls } = {}) {
     const normalized = (Array.isArray(imageUrls) ? imageUrls : [])
       .map((item) => {
-        if (typeof item === "string") return item;
+        if (typeof item === "string") return toAbsoluteApiUrl(item);
         if (item && typeof item === "object") {
-          return item.url ?? item.imageUrl ?? item.secure_url ?? item.path ?? "";
+          return toAbsoluteApiUrl(item.url ?? item.imageUrl ?? item.secure_url ?? item.path ?? "");
         }
         return "";
       })
       .filter(Boolean);
 
-    if (typeof imageUrl === "string" && imageUrl && !normalized.includes(imageUrl)) {
-      normalized.unshift(imageUrl);
+    const normalizedImageUrl = toAbsoluteApiUrl(imageUrl);
+    if (normalizedImageUrl && !normalized.includes(normalizedImageUrl)) {
+      normalized.unshift(normalizedImageUrl);
     }
 
     return normalized;
@@ -112,7 +124,7 @@ export class ShopProduct {
         json?.shop?.avatarUrl ??
         json?.shopProfile?.avatarUrl ??
         json?.seller?.avatarUrl,
-      name: json?.name ?? json?.productName,
+      name: json?.name ?? json?.productName ?? json?.title,
       category: json?.category ?? json?.productCategory ?? json?.categoryName,
       imageUrl,
       imageUrls,
@@ -125,6 +137,7 @@ export class ShopProduct {
       description: json?.description,
       saleStatus:
         json?.saleStatus ??
+        json?.status ??
         json?.availabilityStatus ??
         json?.inventoryStatus ??
         (json?.isSold ? ShopProduct.SOLD : ShopProduct.AVAILABLE),
@@ -187,6 +200,7 @@ export class ShopProduct {
     if (!ProductCategory.isValid(this.category)) return "กรุณาเลือกหมวดหมู่สินค้า";
     if (this.getPriceNumber() <= 0) return "กรุณากรอกราคาสินค้าให้มากกว่า 0";
     if (!selectedFiles.length && !this.getImageUrls().length) return "กรุณาอัปโหลดรูปภาพสินค้า";
+    if (selectedFiles.length > 5) return "อัปโหลดรูปสินค้าได้สูงสุด 5 รูป";
     return "";
   }
 

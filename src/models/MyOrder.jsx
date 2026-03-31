@@ -38,6 +38,9 @@ const normalizeMeetupWorkflowStatus = (value) => {
   if (["accepted", "confirmed", "awaiting_meetup"].includes(normalized)) {
     return "awaiting_meetup";
   }
+  if (["awaiting_buyer_confirmation", "buyer_confirmation_pending"].includes(normalized)) {
+    return "awaiting_buyer_confirmation";
+  }
   if (["countered", "countered_by_seller"].includes(normalized)) {
     return "countered_by_seller";
   }
@@ -116,6 +119,7 @@ export class MyOrderShopOrder {
     subtotal,
     meetupProposal,
     parcelPayment,
+    parcelShipment,
     adminReport,
     buyerShippingAddress,
   } = {}) {
@@ -146,6 +150,17 @@ export class MyOrderShopOrder {
       parcelPayment instanceof ParcelPaymentRecord
         ? parcelPayment
         : ParcelPaymentRecord.fromJSON(parcelPayment);
+    this.parcelShipment = parcelShipment
+      ? {
+          trackingNumber: safeText(parcelShipment.trackingNumber),
+          carrier: safeText(parcelShipment.carrier),
+          status: safeText(parcelShipment.status),
+          note: safeText(parcelShipment.note),
+          preparedAt: safeText(parcelShipment.preparedAt),
+          shippedAt: safeText(parcelShipment.shippedAt),
+          updatedAt: safeText(parcelShipment.updatedAt),
+        }
+      : null;
     this.adminReport = adminReport
       ? {
           reportId: safeText(adminReport.reportId ?? adminReport.id),
@@ -156,6 +171,8 @@ export class MyOrderShopOrder {
       : null;
     this.buyerShippingAddress = buyerShippingAddress
       ? {
+          addressId: safeText(buyerShippingAddress.addressId),
+          label: safeText(buyerShippingAddress.label),
           name: safeText(buyerShippingAddress.name),
           phone: safeText(buyerShippingAddress.phone),
           address: safeText(buyerShippingAddress.address),
@@ -180,6 +197,12 @@ export class MyOrderShopOrder {
         : json?.shippingAddress && typeof json.shippingAddress === "object"
           ? json.shippingAddress
           : null;
+    const parcelShipment =
+      json?.parcelShipment && typeof json.parcelShipment === "object"
+        ? json.parcelShipment
+        : json?.shipment && typeof json.shipment === "object"
+          ? json.shipment
+          : null;
     const inferredShippingMethod =
       json?.shippingMethod ??
       json?.deliveryMethod ??
@@ -189,6 +212,7 @@ export class MyOrderShopOrder {
     const normalizedShippingMethod = ShippingMethod.normalize(inferredShippingMethod);
     const normalizedStatus = ShippingMethod.isParcel(normalizedShippingMethod)
       ? ParcelPaymentRecord.resolveWorkflowStatus([
+          parcelShipment?.status,
           json?.status,
           json?.orderStatus,
           json?.paymentStatus,
@@ -212,6 +236,7 @@ export class MyOrderShopOrder {
       subtotal: json?.subtotal ?? json?.totalPrice ?? json?.total ?? json?.amount,
       meetupProposal,
       parcelPayment,
+      parcelShipment,
       adminReport: json?.adminReport ?? json?.report,
       buyerShippingAddress,
     });
@@ -231,9 +256,14 @@ export class MyOrderShopOrder {
 
   getEffectiveStatus() {
     const currentStatus = safeText(this.status);
+    const shipmentStatus = ParcelPaymentRecord.normalizeStatus(this.parcelShipment?.status);
 
     if (ShippingMethod.isParcel(this.shippingMethod)) {
-      return ParcelPaymentRecord.resolveWorkflowStatus([this.parcelPayment?.status, currentStatus]);
+      return ParcelPaymentRecord.resolveWorkflowStatus([
+        shipmentStatus,
+        this.parcelPayment?.status,
+        currentStatus,
+      ]);
     }
 
     if (ShippingMethod.isMeetup(this.shippingMethod)) {
@@ -254,10 +284,33 @@ export class MyOrderShopOrder {
       "cancelled",
       "cancelled_by_seller",
       "pending_payment_verification",
+      "preparing_parcel",
+      "awaiting_parcel_pickup",
       "pending_seller_confirmation",
       "pending_meetup_response",
       "reported_to_admin",
     ].includes(this.getEffectiveStatus());
+  }
+
+  getRecipientLine() {
+    if (!this.buyerShippingAddress) return "";
+    return [this.buyerShippingAddress.name, this.buyerShippingAddress.phone]
+      .filter(Boolean)
+      .join(" | ");
+  }
+  getTrackingLine() {
+    if (!this.parcelShipment?.trackingNumber) return "";
+    return [this.parcelShipment.carrier, this.parcelShipment.trackingNumber]
+      .filter(Boolean)
+      .join(" | ");
+  }
+
+  getShipmentUpdatedAtLabel() {
+    return formatDateTime(
+      this.parcelShipment?.shippedAt ||
+      this.parcelShipment?.preparedAt ||
+      this.parcelShipment?.updatedAt,
+    );
   }
 
   getStatusLabel() {
@@ -266,13 +319,19 @@ export class MyOrderShopOrder {
         return this.parcelPayment?.getPendingReviewLabel?.() ?? "รอตรวจสอบสลิป";
       case "pending_seller_confirmation":
         return "รอยืนยันคำสั่งซื้อ";
+      case "preparing_parcel":
+        return "กำลังเตรียมพัสดุ";
       case "awaiting_parcel_pickup":
         return "รอรับพัสดุ";
+      case "parcel_in_transit":
+        return "จัดส่งพัสดุแล้ว";
       case "pending_meetup_response":
       case "pending_seller_response":
         return "รอตอบกลับจุดนัดรับ";
       case "awaiting_meetup":
         return "รอนัดพบ";
+      case "awaiting_buyer_confirmation":
+        return "รอผู้ซื้อยืนยันรับของ";
       case "countered_by_seller":
         return "คนขายเสนอจุดใหม่";
       case "cancelled_by_seller":
@@ -293,13 +352,6 @@ export class MyOrderShopOrder {
       default:
         return this.getEffectiveStatus() || "รอดำเนินการ";
     }
-  }
-
-  getRecipientLine() {
-    if (!this.buyerShippingAddress) return "";
-    return [this.buyerShippingAddress.name, this.buyerShippingAddress.phone]
-      .filter(Boolean)
-      .join(" | ");
   }
 }
 
@@ -350,6 +402,7 @@ export class MyOrder {
               subtotal: json?.subtotal ?? json?.totalPrice ?? json?.total ?? json?.amount,
               meetupProposal: json?.meetupProposal ?? json?.meetup,
               parcelPayment: ParcelPaymentRecord.fromJSON(json),
+              parcelShipment: json?.parcelShipment ?? json?.shipment,
               adminReport: json?.adminReport ?? json?.report,
               buyerShippingAddress: json?.buyerShippingAddress ?? json?.shippingAddress,
             },
@@ -413,8 +466,20 @@ export class MyOrder {
       return "cancelled_by_seller";
     }
 
+    if (shopOrderStatuses.some((status) => status === "parcel_in_transit")) {
+      return "parcel_in_transit";
+    }
+
+    if (shopOrderStatuses.some((status) => status === "preparing_parcel")) {
+      return "preparing_parcel";
+    }
+
     if (shopOrderStatuses.some((status) => status === "awaiting_parcel_pickup")) {
       return "awaiting_parcel_pickup";
+    }
+
+    if (shopOrderStatuses.some((status) => status === "awaiting_buyer_confirmation")) {
+      return "awaiting_buyer_confirmation";
     }
 
     if (shopOrderStatuses.some((status) => status === "awaiting_meetup")) {
@@ -448,6 +513,10 @@ export class MyOrder {
       case "pending_payment_verification":
       case "pending_seller_confirmation":
         return "รอตรวจสอบการชำระ";
+      case "preparing_parcel":
+        return "ร้านกำลังเตรียมพัสดุ";
+      case "parcel_in_transit":
+        return "จัดส่งพัสดุแล้ว";
       case "pending_meetup_response":
       case "pending_seller_response":
         return "รอตอบกลับจุดนัดรับ";
@@ -455,6 +524,8 @@ export class MyOrder {
         return "รอรับพัสดุ";
       case "awaiting_meetup":
         return "รอนัดพบ";
+      case "awaiting_buyer_confirmation":
+        return "รอผู้ซื้อยืนยันรับของ";
       case "countered_by_seller":
         return "คนขายเสนอจุดใหม่";
       case "cancelled_by_seller":

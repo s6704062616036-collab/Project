@@ -8,6 +8,8 @@ import {
   CartPopup as HeaderCartPopup,
   ProfilePopup as HeaderProfilePopup,
 } from "../components/HeaderActionPopups";
+import { NotificationBellButton } from "../components/NotificationBellButton";
+import { SavedAddressesEditor } from "../components/SavedAddressesEditor";
 
 export class HomePage extends React.Component {
   state = {
@@ -39,7 +41,7 @@ export class HomePage extends React.Component {
   categoryService = CategoryService.instance();
 
   async componentDidMount() {
-    await Promise.all([this.loadCategories(), this.loadMarketplaceProducts()]);
+    await Promise.all([this.loadCategories(), this.loadMarketplaceProducts(), this.loadCartItems()]);
   }
 
   componentWillUnmount() {
@@ -183,7 +185,10 @@ export class HomePage extends React.Component {
     this.setState({ checkingOut: true, cartError: "", cartDone: "" });
     try {
       const result = await this.cartService.checkout(checkoutPayload);
-      await this.loadCartItems();
+      await Promise.all([
+        this.loadCartItems(),
+        this.loadMarketplaceProducts(),
+      ]);
       this.setState({
         cartDone: result?.message ?? "สั่งซื้อเรียบร้อย",
       });
@@ -263,6 +268,7 @@ export class HomePage extends React.Component {
         email: draft?.email ?? "",
         phone: draft?.phone ?? "",
         address: draft?.address ?? "",
+        addresses: Array.isArray(draft?.addresses) ? draft.addresses : [],
       };
 
       const result = avatarFile
@@ -332,16 +338,22 @@ export class HomePage extends React.Component {
     const user = this.props.user ?? {};
     const filteredProducts = this.getFilteredProducts();
     const cartTotalLabel = this.getCartTotalLabel();
+    const cartBadgeCount = (cartItems ?? []).reduce(
+      (sum, item) => sum + (Number(item?.quantity) || 0),
+      0,
+    );
+    const chatUnreadCount = Number(this.props.chatUnreadCount ?? 0) || 0;
+    const notificationUnreadCount = Number(this.props.notificationUnreadCount ?? 0) || 0;
 
     return (
       <div className="min-h-dvh bg-zinc-50">
-        <div className="sticky top-0 z-40 bg-[#A4E3D8] border-b border-zinc-200">
+        <div className="app-topbar-shell sticky top-0 z-40 bg-[#A4E3D8] border-b border-zinc-200">
           <div className="mx-auto max-w-350 px-4 py-5 flex items-center gap-8">
             <button
               type="button"
               onClick={this.props.onGoHome}
               title="กลับหน้าแรก"
-              className="shrink-0 rounded-xl border border-zinc-200 bg-white p-0"
+              className="app-logo-button shrink-0 rounded-[1.2rem] p-0"
             >
               <img
                 src="/App logo.jpg"
@@ -351,7 +363,7 @@ export class HomePage extends React.Component {
             </button>
             <form className="flex-1" onSubmit={this.onSearchSubmit}>
               <input
-                className="w-full rounded-xl border bg-white border-zinc-200 px-3 py-2 text-sm outline-none"
+                className="app-search-field"
                 placeholder="ค้นหาสินค้า..."
                 value={searchKeyword}
                 onChange={(e) => this.onSearchChange(e.target.value)}
@@ -359,23 +371,35 @@ export class HomePage extends React.Component {
             </form>
 
             <button
-              className="h-10 w-10 rounded-xl bg-[#F4D03E] border border-zinc-200 grid place-items-center"
+              className="app-icon-button relative grid h-10 w-10 place-items-center rounded-xl"
               onClick={this.openCartPopup}
               title="ตะกร้า"
             >
               <img src="/cart.svg" alt="ตะกร้า" className="h-5 w-5 object-contain" />
+              {cartBadgeCount > 0 ? (
+                <span className="absolute -right-1.5 -top-1.5 min-w-[1.25rem] rounded-full bg-zinc-900 px-1 py-0.5 text-[10px] font-bold leading-none text-white">
+                  {cartBadgeCount > 99 ? "99+" : cartBadgeCount}
+                </span>
+              ) : null}
             </button>
 
+            <NotificationBellButton
+              unreadCount={notificationUnreadCount}
+              onClick={this.props.onGoNotifications}
+              className="app-icon-button relative grid h-10 w-10 place-items-center rounded-xl"
+            />
+
             <button
-              className="h-10 w-10 rounded-xl bg-[#F4D03E] border border-zinc-200 grid place-items-center"
+              className="app-icon-button relative grid h-10 w-10 place-items-center rounded-xl"
               onClick={() => this.props.onGoChat?.()}
+              data-chat-unread={chatUnreadCount > 0 ? (chatUnreadCount > 99 ? "99+" : `${chatUnreadCount}`) : ""}
               title="แชท"
             >
               <img src="/chat.svg" alt="แชท" className="h-5 w-5 object-contain" />
             </button>
 
             <button
-              className="h-10 w-10 rounded-xl bg-[#F4D03E] text-white grid place-items-center"
+              className="app-icon-button grid h-10 w-10 place-items-center rounded-xl"
               onClick={this.openProfilePopup}
               title="บัญชี"
             >
@@ -392,7 +416,7 @@ export class HomePage extends React.Component {
               onSelectCategory={this.onCategoryChange}
             />
 
-            <div className="rounded-2xl bg-white shadow p-4 md:p-6 space-y-4">
+            <div className="app-page-section app-main-panel rounded-2xl p-4 md:p-6 space-y-4">
               {loadingProducts ? <div className="text-sm text-zinc-500">กำลังโหลดสินค้าจากฐานข้อมูล...</div> : null}
               {productsError ? (
                 <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
@@ -449,7 +473,7 @@ export class HomePage extends React.Component {
         ) : null}
 
         {showEditModal && draft ? (
-          <EditProfileModal
+          <MultiAddressEditProfileModal
             user={draft}
             saving={saving}
             error={error}
@@ -474,7 +498,7 @@ class CategorySidebar extends React.Component {
     const categoryOptions = [ProductCategory.ALL, ...(categories ?? [])];
 
     return (
-      <aside className="rounded-2xl bg-white shadow p-3 md:p-4">
+      <aside className="app-side-panel rounded-2xl p-3 md:p-4">
         <div className="text-sm font-semibold text-zinc-800 px-2 pb-2">หมวดหมู่</div>
         <div className="space-y-1">
           {categoryOptions.map((category) => {
@@ -483,8 +507,9 @@ class CategorySidebar extends React.Component {
               <button
                 key={category}
                 type="button"
-                className={`w-full rounded-xl px-3 py-2 text-left text-sm transition ${active ? "bg-zinc-900 text-white" : "bg-zinc-50 text-zinc-700 hover:bg-zinc-100"}`}
+                className={`w-full rounded-xl px-3 py-2 text-left text-sm transition ${active ? "border border-amber-300 bg-[#F4D03E] text-zinc-900" : "app-soft-panel text-zinc-700 hover:bg-zinc-100"}`}
                 onClick={() => onSelectCategory?.(category)}
+                aria-pressed={active}
               >
                 {ProductCategory.getLabel(category)}
               </button>
@@ -500,8 +525,8 @@ class HomeProductCard extends React.Component {
   render() {
     const { product, onOpenProduct } = this.props;
     return (
-      <article className="rounded-2xl border border-zinc-200 p-3 bg-white">
-        <div className="aspect-square rounded-xl bg-zinc-100 overflow-hidden grid place-items-center">
+      <article className="app-product-card rounded-2xl p-3">
+        <div className="app-product-media aspect-square rounded-xl grid place-items-center">
           {product?.imageUrl ? (
             <img src={product.imageUrl} alt={product?.name ?? "product"} className="h-full w-full object-cover" />
           ) : (
@@ -510,13 +535,13 @@ class HomeProductCard extends React.Component {
         </div>
         <div className="pt-3 space-y-1">
           <div className="font-semibold text-zinc-800 line-clamp-2 break-words">{product?.name || "ไม่ระบุชื่อสินค้า"}</div>
-          <div className="inline-flex w-fit rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-700">
+          <div className="app-chip inline-flex w-fit rounded-full px-2 py-0.5 text-xs">
             {ProductCategory.getLabel(product?.category)}
           </div>
-          <div className="text-sm font-medium text-zinc-700">{product?.getPriceLabel?.() ?? "฿0.00"}</div>
+          <div className="text-base font-semibold text-zinc-900">{product?.getPriceLabel?.() ?? "฿0.00"}</div>
           <button
             type="button"
-            className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+            className="app-soft-panel w-full rounded-xl px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
             onClick={() => onOpenProduct?.(product)}
           >
             ดูสินค้า
@@ -547,9 +572,9 @@ class EditProfileModal extends React.Component {
     const displayAvatarUrl = avatarPreviewUrl || user?.avatarUrl || "";
 
     return (
-      <div className="fixed inset-0 z-[60] bg-black/40 overflow-y-auto hide-scrollbar p-4" onClick={onClose}>
+      <div className="app-modal-overlay fixed inset-0 z-[60] bg-black/40 hide-scrollbar" onClick={onClose}>
         <div
-          className="mx-auto my-4 w-full max-w-3xl max-h-[calc(100dvh-2rem)] overflow-y-auto hide-scrollbar rounded-3xl bg-white shadow p-4 md:p-6 space-y-6"
+          className="app-modal-card hide-scrollbar w-full max-w-3xl rounded-3xl bg-white shadow p-4 md:p-6 space-y-6"
           onClick={this.stop}
         >
           <div className="flex items-center justify-between">
@@ -619,6 +644,124 @@ class EditProfileModal extends React.Component {
               </button>
               <button
                 className="rounded-xl bg-[#F4D03E] text-black px-4 py-2 font-semibold disabled:opacity-60"
+                onClick={onSave}
+                disabled={saving || deleting}
+              >
+                {saving ? "กำลังบันทึก..." : "บันทึก"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+}
+
+class MultiAddressEditProfileModal extends React.Component {
+  stop = (e) => e.stopPropagation();
+
+  render() {
+    const {
+      user,
+      saving,
+      deleting,
+      error,
+      avatarFile,
+      avatarPreviewUrl,
+      onClose,
+      onChangeField,
+      onChangeAvatarFile,
+      onSave,
+      onDelete,
+    } = this.props;
+    const displayAvatarUrl = avatarPreviewUrl || user?.avatarUrl || "";
+
+    return (
+      <div className="app-modal-overlay fixed inset-0 z-[60] bg-black/40 hide-scrollbar" onClick={onClose}>
+        <div
+          className="app-modal-card hide-scrollbar w-full max-w-4xl rounded-3xl bg-white shadow p-4 md:p-6 space-y-6"
+          onClick={this.stop}
+        >
+          <div className="flex items-center justify-between">
+            <div className="text-2xl font-semibold">บัญชีของฉัน</div>
+            <button
+              className="grid h-10 w-10 place-items-center rounded-xl border border-zinc-200"
+              onClick={onClose}
+              title="ปิด"
+            >
+              ×
+            </button>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <label className="group relative block h-20 w-20 cursor-pointer overflow-hidden rounded-full bg-zinc-200 ring-4 ring-white">
+              {displayAvatarUrl ? (
+                <img src={displayAvatarUrl} alt="avatar" className="h-full w-full object-cover" />
+              ) : (
+                <span className="grid h-full w-full place-items-center text-zinc-600">👤</span>
+              )}
+              <div className="absolute inset-0 grid place-items-center bg-black/45 text-center text-[11px] font-semibold text-white opacity-0 transition group-hover:opacity-100">
+                กดเพื่อเปลี่ยนรูป
+              </div>
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => onChangeAvatarFile?.(e.target.files?.[0] ?? null)}
+              />
+            </label>
+            <div className="space-y-1">
+              <div className="text-3xl font-semibold">{user?.name || "User"}</div>
+              <div className="text-sm text-zinc-500">กดที่รูปเพื่ออัปโหลดและแก้ไขรูปโปรไฟล์</div>
+              {avatarFile ? <div className="text-xs text-zinc-500">{avatarFile.name}</div> : null}
+            </div>
+          </div>
+
+          {error ? (
+            <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>
+          ) : null}
+
+          <div className="space-y-3">
+            <div className="text-2xl font-semibold text-zinc-800">ข้อมูลบัญชี</div>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <Field label="ชื่อที่แสดง" value={user?.name} onChange={(v) => onChangeField("name", v)} />
+              <Field label="อีเมล" value={user?.email} onChange={(v) => onChangeField("email", v)} />
+              <Field label="เบอร์โทร" value={user?.phone} onChange={(v) => onChangeField("phone", v)} />
+            </div>
+          </div>
+
+          <SavedAddressesEditor
+            addresses={user?.addresses}
+            defaultName={user?.name}
+            defaultPhone={user?.phone}
+            onChange={(nextAddresses) => {
+              onChangeField("addresses", nextAddresses);
+              const primaryAddress =
+                (nextAddresses ?? []).find((entry) => entry?.isDefault)?.address ||
+                nextAddresses?.[0]?.address ||
+                "";
+              onChangeField("address", primaryAddress);
+            }}
+          />
+
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <button
+              className="rounded-xl border border-red-200 px-4 py-2 font-semibold text-red-600 hover:bg-red-50 disabled:opacity-60"
+              onClick={onDelete}
+              disabled={saving || deleting}
+            >
+              {deleting ? "กำลังลบบัญชี..." : "ลบบัญชี"}
+            </button>
+            <div className="flex gap-2">
+              <button
+                className="rounded-xl border border-zinc-200 px-4 py-2 font-medium"
+                onClick={onClose}
+                disabled={saving || deleting}
+              >
+                ยกเลิก
+              </button>
+              <button
+                className="rounded-xl bg-[#F4D03E] px-4 py-2 font-semibold text-black disabled:opacity-60"
                 onClick={onSave}
                 disabled={saving || deleting}
               >

@@ -242,8 +242,6 @@ export class MyShopService {
     }
     if (parcelQrFile) {
       formData.append("parcelQrCode", parcelQrFile);
-      formData.append("paymentQrCode", parcelQrFile);
-      formData.append("kycQrCode", parcelQrFile);
     }
 
     const result = await this.http.request("/api/myshop/me", {
@@ -379,6 +377,31 @@ export class MyShopService {
   }
 
   // โครง backend: GET /api/products (ดึงสินค้าที่ลงขายทั้งหมดจากผู้ใช้ทุกคน)
+  async updateParcelShipment({ orderId, shopOrderKey, action, trackingNumber, carrier, note } = {}) {
+    const normalizedOrderId = `${orderId ?? ""}`.trim();
+    const normalizedShopOrderKey = `${shopOrderKey ?? ""}`.trim();
+    const normalizedAction = `${action ?? ""}`.trim();
+
+    if (!normalizedOrderId) throw new Error("ไม่พบ orderId");
+    if (!normalizedShopOrderKey) throw new Error("ไม่พบ shopOrderKey");
+    if (!normalizedAction) throw new Error("ไม่พบ action สำหรับการจัดส่ง");
+
+    const result = await this.http.post(
+      `/api/myshop/parcel-payment-reviews/${encodeURIComponent(normalizedOrderId)}/shop-orders/${encodeURIComponent(normalizedShopOrderKey)}/shipment`,
+      {
+        action: normalizedAction,
+        trackingNumber: `${trackingNumber ?? ""}`.trim(),
+        carrier: `${carrier ?? ""}`.trim(),
+        note: `${note ?? ""}`.trim(),
+      },
+    );
+
+    return {
+      review: buildReviewFromDecisionResult(result, normalizedShopOrderKey),
+      message: pickFirstDefined(result, [["message"], ["data", "message"]]) ?? "อัปเดตสถานะจัดส่งแล้ว",
+    };
+  }
+
   async listMarketplaceProducts() {
     const result = await this.http.get("/api/products");
     const products = Array.isArray(result?.products)
@@ -433,18 +456,17 @@ export class MyShopService {
       formData.append(key, value ?? "");
     });
 
-    const files = Array.isArray(imageFiles)
+    const files = (Array.isArray(imageFiles)
       ? imageFiles.filter(Boolean)
       : imageFiles
         ? [imageFiles]
-        : [];
+        : []).slice(0, 5);
 
     files.forEach((file) => {
       formData.append("images", file);
     });
     if (files.length === 1) {
       // เผื่อ backend เดิมที่รองรับ field ชื่อ image แบบไฟล์เดียว
-      formData.append("image", files[0]);
     }
 
     const result = await this.http.request("/api/myshop/products", {
@@ -467,17 +489,16 @@ export class MyShopService {
       formData.append(key, value ?? "");
     });
 
-    const files = Array.isArray(imageFiles)
+    const files = (Array.isArray(imageFiles)
       ? imageFiles.filter(Boolean)
       : imageFiles
         ? [imageFiles]
-        : [];
+        : []).slice(0, 5);
 
     files.forEach((file) => {
       formData.append("images", file);
     });
     if (files.length === 1) {
-      formData.append("image", files[0]);
     }
 
     const endpoint = `/api/myshop/products/${encodeURIComponent(normalizedId)}`;

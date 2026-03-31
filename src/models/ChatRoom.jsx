@@ -21,6 +21,7 @@ export class ChatRoom {
     counterpartId,
     counterpartName,
     counterpartAvatarUrl,
+    unreadCount,
     lastMessage,
     createdAt,
     updatedAt,
@@ -36,6 +37,7 @@ export class ChatRoom {
     this.counterpartId = counterpartId ?? "";
     this.counterpartName = counterpartName ?? "";
     this.counterpartAvatarUrl = counterpartAvatarUrl ?? "";
+    this.unreadCount = Number.isFinite(Number(unreadCount)) ? Math.max(0, Number(unreadCount)) : 0;
     this.lastMessage = lastMessage instanceof ChatMessage ? lastMessage : ChatMessage.fromJSON(lastMessage);
     this.createdAt = toIsoString(createdAt);
     this.updatedAt = toIsoString(updatedAt);
@@ -54,6 +56,7 @@ export class ChatRoom {
       counterpartId: json?.counterpartId ?? "",
       counterpartName: json?.counterpartName ?? json?.partnerName ?? "",
       counterpartAvatarUrl: json?.counterpartAvatarUrl ?? "",
+      unreadCount: json?.unreadCount,
       lastMessage: json?.lastMessage ?? null,
       createdAt: json?.createdAt,
       updatedAt: json?.updatedAt ?? json?.lastMessage?.createdAt ?? json?.createdAt,
@@ -92,5 +95,14 @@ export class ChatRoom {
       hour: "2-digit",
       minute: "2-digit",
     }).format(date);
+  }
+
+  hasUnread() {
+    return this.unreadCount > 0;
+  }
+
+  getUnreadBadgeLabel() {
+    if (!this.hasUnread()) return "";
+    return this.unreadCount > 99 ? "99+" : `${this.unreadCount}`;
   }
 }

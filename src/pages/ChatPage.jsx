@@ -4,6 +4,24 @@ import { RealtimeSyncManager } from "../utils/RealtimeSyncManager";
 
 const safeText = (value) => `${value ?? ""}`.trim();
 
+const getAvatarFallback = (name) => {
+  const normalized = safeText(name);
+  if (!normalized) return "👤";
+  return normalized.charAt(0).toUpperCase();
+};
+
+const ChatAvatar = ({ src, name, sizeClass = "h-10 w-10", textClass = "text-sm" }) => (
+  <div
+    className={`${sizeClass} shrink-0 overflow-hidden rounded-full bg-zinc-200 ring-1 ring-zinc-200 grid place-items-center font-semibold text-zinc-600 ${textClass}`}
+  >
+    {safeText(src) ? (
+      <img src={src} alt={safeText(name) || "avatar"} className="h-full w-full object-cover" />
+    ) : (
+      <span>{getAvatarFallback(name)}</span>
+    )}
+  </div>
+);
+
 export class ChatPage extends React.Component {
   state = {
     loadingChats: true,
@@ -15,11 +33,14 @@ export class ChatPage extends React.Component {
     messages: [],
     draftText: "",
     draftImageFile: null,
+    draftVideoFile: null,
     sending: false,
     sendingError: "",
     proposalActionLoadingId: "",
     proposalActionError: "",
     proposalActionErrorMessageId: "",
+    lightboxImageUrl: "",
+    lightboxImageAlt: "",
   };
 
   chatService = ChatService.instance();
@@ -61,7 +82,10 @@ export class ChatPage extends React.Component {
 
     this.realtimeRefreshInFlight = true;
     try {
-      await this.loadChats({ preferredChatId: this.state.selectedChatId });
+      await this.loadChats({
+        preferredChatId: this.state.selectedChatId,
+        silent: true,
+      });
     } finally {
       this.realtimeRefreshInFlight = false;
     }
@@ -72,14 +96,18 @@ export class ChatPage extends React.Component {
     }
   };
 
-  loadChats = async ({ preferredChatId } = {}) => {
-    this.setState({ loadingChats: true, chatsError: "" });
+  loadChats = async ({ preferredChatId, silent = false } = {}) => {
+    if (!silent) {
+      this.setState({ loadingChats: true, chatsError: "" });
+    }
 
     try {
       const { chats } = await this.chatService.listMyChats();
       const preferred = safeText(preferredChatId) || safeText(this.state.selectedChatId);
       const hasPreferred = chats.some((chat) => chat.id === preferred);
       const nextSelectedChatId = hasPreferred ? preferred : chats[0]?.id ?? "";
+      const previousSelectedChatId = safeText(this.state.selectedChatId);
+      const shouldPreserveMessages = silent && nextSelectedChatId === previousSelectedChatId;
 
       this.setState(
         {
@@ -89,41 +117,59 @@ export class ChatPage extends React.Component {
         },
         () => {
           if (nextSelectedChatId) {
-            this.loadMessages(nextSelectedChatId);
+            this.loadMessages(nextSelectedChatId, {
+              silent,
+              preserveMessages: shouldPreserveMessages,
+            });
           } else {
             this.setState({ messages: [], messagesError: "" });
           }
         },
       );
     } catch (e) {
-      this.setState({
+      if (!silent) {
+        this.setState({
         chatsError: e?.message ?? "โหลดรายการแชทไม่สำเร็จ",
-      });
+        });
+      }
     } finally {
-      this.setState({ loadingChats: false });
+      if (!silent) {
+        this.setState({ loadingChats: false });
+      }
     }
   };
 
-  loadMessages = async (chatIdInput) => {
+  loadMessages = async (chatIdInput, { silent = false, preserveMessages = false } = {}) => {
     const chatId = safeText(chatIdInput);
     if (!chatId) {
       this.setState({ messages: [], messagesError: "", loadingMessages: false });
       return;
     }
 
-    this.setState({ loadingMessages: true, messagesError: "" });
+    if (!silent) {
+      this.setState({
+        loadingMessages: true,
+        messagesError: "",
+        ...(preserveMessages ? {} : { messages: [] }),
+      });
+    }
     try {
       const { messages } = await this.chatService.listMessages(chatId);
       this.setState({
         messages: Array.isArray(messages) ? messages : [],
         messagesError: "",
       });
+      this.props.onChatReadStateChanged?.();
     } catch (e) {
-      this.setState({
+      if (!silent) {
+        this.setState({
         messagesError: e?.message ?? "โหลดข้อความไม่สำเร็จ",
-      });
+        });
+      }
     } finally {
-      this.setState({ loadingMessages: false });
+      if (!silent) {
+        this.setState({ loadingMessages: false });
+      }
     }
   };
 
@@ -141,11 +187,27 @@ export class ChatPage extends React.Component {
   };
 
   setDraftImageFile = (file) => {
-    this.setState({ draftImageFile: file ?? null, sendingError: "" });
+    this.setState({
+      draftImageFile: file ?? null,
+      draftVideoFile: file ? null : this.state.draftVideoFile,
+      sendingError: "",
+    });
   };
 
   clearDraftImageFile = () => {
     this.setState({ draftImageFile: null });
+  };
+
+  setDraftVideoFile = (file) => {
+    this.setState({
+      draftVideoFile: file ?? null,
+      draftImageFile: file ? null : this.state.draftImageFile,
+      sendingError: "",
+    });
+  };
+
+  clearDraftVideoFile = () => {
+    this.setState({ draftVideoFile: null });
   };
 
   respondMeetupProposal = async ({ messageId, action, location } = {}) => {
@@ -167,8 +229,8 @@ export class ChatPage extends React.Component {
         location,
       });
 
-      await this.loadMessages(chatId);
-      await this.loadChats({ preferredChatId: chatId });
+      await this.loadMessages(chatId, { silent: true, preserveMessages: true });
+      await this.loadChats({ preferredChatId: chatId, silent: true });
     } catch (e) {
       this.setState({
         proposalActionError: e?.message ?? "ตอบกลับข้อเสนอนัดรับไม่สำเร็จ",
@@ -179,9 +241,43 @@ export class ChatPage extends React.Component {
     }
   };
 
+  confirmMeetupHandover = async ({ messageId } = {}) => {
+    const chatId = safeText(this.state.selectedChatId);
+    const normalizedMessageId = safeText(messageId);
+    if (!chatId || !normalizedMessageId) return;
+
+    if (typeof window !== "undefined") {
+      const confirmed = window.confirm("ยืนยันหรือไม่ว่าคุณส่งมอบสินค้ากับผู้ซื้อเรียบร้อยแล้ว?");
+      if (!confirmed) return;
+    }
+
+    this.setState({
+      proposalActionLoadingId: normalizedMessageId,
+      proposalActionError: "",
+      proposalActionErrorMessageId: "",
+    });
+
+    try {
+      await this.chatService.confirmMeetupHandover({
+        chatId,
+        messageId: normalizedMessageId,
+      });
+
+      await this.loadMessages(chatId, { silent: true, preserveMessages: true });
+      await this.loadChats({ preferredChatId: chatId, silent: true });
+    } catch (e) {
+      this.setState({
+        proposalActionError: e?.message ?? "ยืนยันการส่งมอบสินค้าไม่สำเร็จ",
+        proposalActionErrorMessageId: normalizedMessageId,
+      });
+    } finally {
+      this.setState({ proposalActionLoadingId: "" });
+    }
+  };
+
   sendMessage = async (e) => {
     e.preventDefault();
-    const { selectedChatId, draftText, draftImageFile } = this.state;
+    const { selectedChatId, draftText, draftImageFile, draftVideoFile } = this.state;
     if (!safeText(selectedChatId)) return;
 
     this.setState({ sending: true, sendingError: "" });
@@ -190,19 +286,21 @@ export class ChatPage extends React.Component {
         chatId: selectedChatId,
         text: draftText,
         imageFile: draftImageFile,
+        videoFile: draftVideoFile,
       });
 
       this.setState((state) => ({
         draftText: "",
         draftImageFile: null,
+        draftVideoFile: null,
         messages: message ? [...state.messages, message] : state.messages,
       }));
 
       if (!message) {
-        await this.loadMessages(selectedChatId);
+        await this.loadMessages(selectedChatId, { silent: true, preserveMessages: true });
       }
 
-      await this.loadChats({ preferredChatId: selectedChatId });
+      await this.loadChats({ preferredChatId: selectedChatId, silent: true });
     } catch (e2) {
       this.setState({
         sendingError: e2?.message ?? "ส่งข้อความไม่สำเร็จ",
@@ -218,6 +316,38 @@ export class ChatPage extends React.Component {
     this.props.onOpenProduct?.({ id: activeChat.productId });
   };
 
+  openCounterpartProfile = () => {
+    const activeChat = this.getActiveChat();
+    if (!activeChat) return;
+
+    const currentUserId = safeText(this.props.user?.id);
+    const fallbackCounterpartId =
+      safeText(activeChat?.ownerId) === currentUserId
+        ? safeText(activeChat?.buyerId)
+        : safeText(activeChat?.ownerId);
+    const counterpartId = safeText(activeChat?.counterpartId) || fallbackCounterpartId;
+
+    if (!counterpartId) return;
+    this.props.onOpenPublicUserProfile?.(counterpartId);
+  };
+
+  openImageLightbox = ({ imageUrl, alt } = {}) => {
+    const normalizedUrl = safeText(imageUrl);
+    if (!normalizedUrl) return;
+
+    this.setState({
+      lightboxImageUrl: normalizedUrl,
+      lightboxImageAlt: safeText(alt) || "chat-image",
+    });
+  };
+
+  closeImageLightbox = () => {
+    this.setState({
+      lightboxImageUrl: "",
+      lightboxImageAlt: "",
+    });
+  };
+
   getActiveChat() {
     return this.state.chats.find((chat) => chat.id === this.state.selectedChatId) ?? null;
   }
@@ -226,7 +356,7 @@ export class ChatPage extends React.Component {
     const { loadingChats, chatsError, chats, selectedChatId } = this.state;
 
     return (
-      <section className="rounded-2xl bg-white shadow p-4 space-y-3">
+      <section className="flex min-h-[68dvh] flex-col rounded-2xl bg-white p-4 shadow">
         <div className="text-sm font-semibold text-zinc-800">แชทกับร้านค้า</div>
 
         {loadingChats ? <div className="text-sm text-zinc-500">กำลังโหลดรายการแชท...</div> : null}
@@ -242,7 +372,7 @@ export class ChatPage extends React.Component {
         ) : null}
 
         {!loadingChats && chats.length ? (
-          <div className="max-h-[62dvh] overflow-y-auto space-y-2 pr-1 hide-scrollbar">
+          <div className="mt-3 min-h-0 flex-1 overflow-y-auto space-y-2 pr-1 hide-scrollbar">
             {chats.map((chat) => (
               <ChatListItem
                 key={chat.id}
@@ -264,6 +394,7 @@ export class ChatPage extends React.Component {
       messages,
       draftText,
       draftImageFile,
+      draftVideoFile,
       sending,
       sendingError,
       proposalActionLoadingId,
@@ -277,27 +408,37 @@ export class ChatPage extends React.Component {
 
     if (!activeChat) {
       return (
-        <section className="rounded-2xl bg-white shadow p-6 text-sm text-zinc-500">
+        <section className="flex min-h-[68dvh] items-center rounded-2xl bg-white p-6 text-sm text-zinc-500 shadow md:sticky md:top-28 md:self-start md:h-[calc(100dvh-8.5rem)]">
           เลือกห้องแชทจากรายการด้านซ้ายเพื่อเริ่มพูดคุยกับร้านค้า
         </section>
       );
     }
 
     return (
-      <section className="rounded-2xl bg-white shadow p-4 md:p-5 space-y-4">
+      <section className="flex min-h-[68dvh] flex-col overflow-hidden rounded-2xl bg-white p-4 shadow md:sticky md:top-28 md:self-start md:h-[calc(100dvh-8.5rem)] md:p-5">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-100 pb-3">
           <div className="min-w-0">
             <div className="text-base font-semibold text-zinc-900 truncate">{activeChat.getDisplayName()}</div>
             <div className="text-xs text-zinc-500 truncate">สินค้า: {activeChat.getProductLabel()}</div>
           </div>
-          <button
-            type="button"
-            className="rounded-xl border border-zinc-200 px-3 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50"
-            onClick={this.openProductFromActiveChat}
-            disabled={!activeChat?.productId}
-          >
-            ดูสินค้า
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className="rounded-xl border border-zinc-200 px-3 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50"
+              onClick={this.openCounterpartProfile}
+              disabled={!safeText(activeChat?.counterpartId) && !safeText(activeChat?.ownerId)}
+            >
+              ดูโปรไฟล์
+            </button>
+            <button
+              type="button"
+              className="rounded-xl border border-zinc-200 px-3 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50"
+              onClick={this.openProductFromActiveChat}
+              disabled={!activeChat?.productId}
+            >
+              ดูสินค้า
+            </button>
+          </div>
         </div>
 
         {loadingMessages ? <div className="text-sm text-zinc-500">กำลังโหลดข้อความ...</div> : null}
@@ -313,15 +454,28 @@ export class ChatPage extends React.Component {
         ) : null}
 
         {!loadingMessages && messages.length ? (
-          <div className="max-h-[44dvh] overflow-y-auto space-y-2 pr-1 hide-scrollbar">
+          <div className="mt-4 min-h-0 flex-1 overflow-y-auto space-y-2 pr-1 hide-scrollbar">
             {messages.map((message, index) => (
               <MessageBubble
                 key={message.id || `${message.chatId || activeChat.id}-${index}`}
                 message={message}
                 mine={message.isMine(userId)}
+                avatarUrl={
+                  safeText(message?.senderAvatarUrl) ||
+                  (message.isMine(userId)
+                    ? safeText(this.props.user?.avatarUrl)
+                    : safeText(activeChat?.getDisplayAvatarUrl?.()))
+                }
+                avatarName={
+                  message.isMine(userId)
+                    ? safeText(this.props.user?.name || this.props.user?.email)
+                    : safeText(message?.senderName || activeChat?.getDisplayName?.())
+                }
                 canSellerRespondMeetupProposal={canSellerRespondMeetupProposal}
                 canBuyerRespondMeetupProposal={canBuyerRespondMeetupProposal}
                 onRespondMeetupProposal={this.respondMeetupProposal}
+                onConfirmMeetupHandover={this.confirmMeetupHandover}
+                onOpenImage={this.openImageLightbox}
                 responding={proposalActionLoadingId === message.id}
                 actionError={
                   proposalActionErrorMessageId === message.id ? proposalActionError : ""
@@ -329,63 +483,97 @@ export class ChatPage extends React.Component {
               />
             ))}
           </div>
-        ) : null}
+        ) : (
+          <div className="mt-4 min-h-0 flex-1" />
+        )}
 
-        <form className="space-y-2 border-t border-zinc-100 pt-3" onSubmit={this.sendMessage}>
-          <textarea
-            className="w-full min-h-24 rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none"
-            placeholder="พิมพ์ข้อความ..."
-            value={draftText}
-            onChange={(e) => this.setDraftText(e.target.value)}
-          />
+        <form className="sticky bottom-0 mt-4 border-t border-zinc-100 bg-white pt-3" onSubmit={this.sendMessage}>
+          <div className="flex items-start gap-3">
+            <ChatAvatar
+              src={this.props.user?.avatarUrl}
+              name={this.props.user?.name || this.props.user?.email}
+              sizeClass="h-11 w-11"
+              textClass="text-sm"
+            />
 
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <label className="inline-flex cursor-pointer items-center rounded-xl border border-zinc-200 px-3 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50">
-                แนบรูป
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => this.setDraftImageFile(e.target.files?.[0] ?? null)}
-                />
-              </label>
+            <div className="min-w-0 flex-1 space-y-2">
+              <textarea
+                className="w-full min-h-16 rounded-2xl border border-zinc-200 px-3 py-2 text-sm outline-none"
+                placeholder="พิมพ์ข้อความ..."
+                value={draftText}
+                onChange={(e) => this.setDraftText(e.target.value)}
+              />
 
-              {draftImageFile ? (
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="inline-flex cursor-pointer items-center rounded-xl border border-zinc-200 px-3 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50">
+                    แนบรูป
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => this.setDraftImageFile(e.target.files?.[0] ?? null)}
+                    />
+                  </label>
+                  <label className="inline-flex cursor-pointer items-center rounded-xl border border-zinc-200 px-3 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50">
+                    แนบวิดีโอ
+                    <input
+                      type="file"
+                      accept="video/mp4,video/webm,video/quicktime"
+                      className="hidden"
+                      onChange={(e) => this.setDraftVideoFile(e.target.files?.[0] ?? null)}
+                    />
+                  </label>
+
+                  {draftImageFile ? (
+                    <button
+                      type="button"
+                      className="rounded-xl border border-zinc-200 px-2.5 py-2 text-xs text-zinc-600 hover:bg-zinc-50"
+                      onClick={this.clearDraftImageFile}
+                      title={draftImageFile.name}
+                    >
+                      {draftImageFile.name}
+                    </button>
+                  ) : null}
+                  {draftVideoFile ? (
+                    <button
+                      type="button"
+                      className="rounded-xl border border-zinc-200 px-2.5 py-2 text-xs text-zinc-600 hover:bg-zinc-50"
+                      onClick={this.clearDraftVideoFile}
+                      title={draftVideoFile.name}
+                    >
+                      {draftVideoFile.name}
+                    </button>
+                  ) : null}
+                </div>
+
                 <button
-                  type="button"
-                  className="rounded-xl border border-zinc-200 px-2.5 py-2 text-xs text-zinc-600 hover:bg-zinc-50"
-                  onClick={this.clearDraftImageFile}
-                  title={draftImageFile.name}
+                  type="submit"
+                  className="rounded-xl bg-zinc-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                  disabled={sending}
                 >
-                  {draftImageFile.name}
+                  {sending ? "กำลังส่ง..." : "ส่ง"}
                 </button>
+              </div>
+
+              {sendingError ? (
+                <div className="rounded-xl border border-red-200 bg-red-50 p-2 text-xs text-red-700">
+                  {sendingError}
+                </div>
               ) : null}
             </div>
-
-            <button
-              type="submit"
-              className="rounded-xl bg-zinc-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
-              disabled={sending}
-            >
-              {sending ? "กำลังส่ง..." : "ส่ง"}
-            </button>
           </div>
-
-          {sendingError ? (
-            <div className="rounded-xl border border-red-200 bg-red-50 p-2 text-xs text-red-700">
-              {sendingError}
-            </div>
-          ) : null}
         </form>
       </section>
     );
   }
 
   render() {
+    const { lightboxImageUrl, lightboxImageAlt } = this.state;
+
     return (
-      <div className="min-h-dvh bg-zinc-50">
-        <div className="sticky top-0 z-40 bg-[#A4E3D8] border-b border-zinc-200">
+      <div className="app-chat-page min-h-dvh bg-zinc-50">
+        <div className="app-topbar-shell sticky top-0 z-40 bg-[#A4E3D8] border-b border-zinc-200">
           <div className="mx-auto max-w-350 px-4 py-5 flex items-center gap-4">
             <button
               type="button"
@@ -409,6 +597,20 @@ export class ChatPage extends React.Component {
             {this.renderRightPanel()}
           </div>
         </div>
+
+        {lightboxImageUrl ? (
+          <div
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 px-4 py-6"
+            onClick={this.closeImageLightbox}
+          >
+            <img
+              src={lightboxImageUrl}
+              alt={lightboxImageAlt || "chat-image"}
+              className="max-h-[88vh] max-w-[92vw] rounded-2xl object-contain shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+        ) : null}
       </div>
     );
   }
@@ -418,31 +620,45 @@ class ChatListItem extends React.Component {
   render() {
     const { chat, active, onClick } = this.props;
     const avatarUrl = chat.getDisplayAvatarUrl();
+    const hasUnread = chat?.hasUnread?.() ?? false;
+    const unreadBadgeLabel = chat?.getUnreadBadgeLabel?.() ?? "";
 
     return (
       <button
         type="button"
-        className={`w-full rounded-xl border p-3 text-left transition ${
-          active ? "border-zinc-900 bg-zinc-100" : "border-zinc-200 bg-white hover:bg-zinc-50"
+        className={`chat-list-item w-full rounded-xl border p-3 text-left ${
+          active ? "border-amber-300 bg-[#F4D03E]/55" : "border-zinc-200 bg-white hover:bg-zinc-50"
         }`}
         onClick={onClick}
+        aria-pressed={active}
       >
         <div className="flex items-start gap-2">
-          <div className="h-10 w-10 shrink-0 rounded-full bg-zinc-200 overflow-hidden grid place-items-center text-xs">
-            {avatarUrl ? (
-              <img src={avatarUrl} alt={chat.getDisplayName()} className="h-full w-full object-cover" />
-            ) : (
-              <span>👤</span>
-            )}
-          </div>
+          <ChatAvatar
+            src={avatarUrl}
+            name={chat.getDisplayName()}
+            sizeClass="h-10 w-10"
+            textClass="text-xs"
+          />
 
           <div className="min-w-0 flex-1 space-y-1">
             <div className="flex items-start justify-between gap-2">
-              <div className="truncate text-sm font-semibold text-zinc-900">{chat.getDisplayName()}</div>
-              <div className="text-[10px] text-zinc-500">{chat.getUpdatedAtLabel()}</div>
+              <div className="min-w-0 flex items-center gap-2">
+                <div className="truncate text-sm font-semibold text-zinc-900">{chat.getDisplayName()}</div>
+                <span
+                  className={`min-w-[1.75rem] shrink-0 rounded-full px-1.5 py-0.5 text-center text-[10px] font-bold leading-none ${
+                    hasUnread ? "bg-zinc-900 text-white opacity-100" : "opacity-0"
+                  }`}
+                  aria-hidden={!hasUnread}
+                >
+                  {hasUnread ? unreadBadgeLabel : "0"}
+                </span>
+              </div>
+              <div className="w-14 shrink-0 text-right text-[10px] text-zinc-500">{chat.getUpdatedAtLabel()}</div>
             </div>
             <div className="truncate text-xs text-zinc-500">สินค้า: {chat.getProductLabel()}</div>
-            <div className="line-clamp-2 text-xs text-zinc-700 break-words">{chat.getLastMessagePreview()}</div>
+            <div className={`line-clamp-2 text-xs break-words ${hasUnread ? "font-semibold text-zinc-900" : "text-zinc-700"}`}>
+              {chat.getLastMessagePreview()}
+            </div>
           </div>
         </div>
       </button>
@@ -455,9 +671,13 @@ class MessageBubble extends React.Component {
     const {
       message,
       mine,
+      avatarUrl,
+      avatarName,
+      onOpenImage,
       canSellerRespondMeetupProposal,
       canBuyerRespondMeetupProposal,
       onRespondMeetupProposal,
+      onConfirmMeetupHandover,
       responding,
       actionError,
     } = this.props;
@@ -471,6 +691,7 @@ class MessageBubble extends React.Component {
             canSellerRespond={canSellerRespondMeetupProposal}
             canBuyerRespond={canBuyerRespondMeetupProposal}
             onRespond={onRespondMeetupProposal}
+            onConfirmHandover={onConfirmMeetupHandover}
             responding={responding}
             error={actionError}
           />
@@ -483,17 +704,40 @@ class MessageBubble extends React.Component {
       : "bg-zinc-100 text-zinc-800 border-zinc-200";
 
     return (
-      <div className={`flex ${mine ? "justify-end" : "justify-start"}`}>
+      <div className={`flex items-end gap-2 ${mine ? "justify-end" : "justify-start"}`}>
+        {!mine ? <ChatAvatar src={avatarUrl} name={avatarName} sizeClass="h-9 w-9" textClass="text-xs" /> : null}
         <div className={`max-w-[75%] rounded-2xl border px-3 py-2 space-y-2 ${bubbleClass}`}>
           {!mine ? <div className="text-[11px] font-semibold">{message.senderName || "ผู้ใช้"}</div> : null}
+          {message.hasVideo() ? (
+            <div className="rounded-xl overflow-hidden border border-black/10 bg-black/5">
+              <video
+                src={message.videoUrl}
+                controls
+                preload="metadata"
+                className="max-h-72 w-full bg-black object-contain"
+              />
+            </div>
+          ) : null}
           {message.hasImage() ? (
             <div className="rounded-xl overflow-hidden border border-black/10 bg-black/5">
-              <img src={message.imageUrl} alt="chat-image" className="max-h-64 w-full object-cover" />
+              <button
+                type="button"
+                className="block w-full cursor-zoom-in"
+                onClick={() =>
+                  onOpenImage?.({
+                    imageUrl: message.imageUrl,
+                    alt: message.senderName || "chat-image",
+                  })
+                }
+              >
+                <img src={message.imageUrl} alt="chat-image" className="max-h-64 w-full object-cover" />
+              </button>
             </div>
           ) : null}
           {message.hasText() ? <div className="text-sm whitespace-pre-wrap break-words">{message.text}</div> : null}
           <div className={`text-[10px] ${mine ? "text-zinc-300" : "text-zinc-500"}`}>{message.getTimeLabel()}</div>
         </div>
+        {mine ? <ChatAvatar src={avatarUrl} name={avatarName} sizeClass="h-9 w-9" textClass="text-xs" /> : null}
       </div>
     );
   }
@@ -563,6 +807,8 @@ class MeetupProposalCard extends React.Component {
     const className =
       status === "awaiting_meetup"
         ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+        : status === "awaiting_buyer_confirmation"
+          ? "border-sky-200 bg-sky-50 text-sky-700"
         : status === "countered_by_seller"
           ? "border-sky-200 bg-sky-50 text-sky-700"
           : status === "cancelled_by_seller" || status === "rejected_by_buyer"
@@ -573,13 +819,14 @@ class MeetupProposalCard extends React.Component {
   }
 
   render() {
-    const { message, mine, canSellerRespond, canBuyerRespond, responding, error } = this.props;
+    const { message, mine, canSellerRespond, canBuyerRespond, onConfirmHandover, responding, error } = this.props;
     const { editingCounterLocation, counterLocation } = this.state;
     const proposalStatus = message?.getMeetupProposalStatus?.() ?? "";
     const proposalLocation = message?.meetupProposal?.location ?? "";
     const responseLocation = message?.meetupProposal?.responseLocation ?? "";
     const canSellerAct = canSellerRespond && proposalStatus === "pending_seller_response";
     const canBuyerAct = canBuyerRespond && proposalStatus === "countered_by_seller";
+    const canSellerConfirmHandover = canSellerRespond && proposalStatus === "awaiting_meetup";
     const canAct = canSellerAct || canBuyerAct;
 
     return (
@@ -613,7 +860,15 @@ class MeetupProposalCard extends React.Component {
 
         {proposalStatus === "awaiting_meetup" ? (
           <div className={`text-xs ${mine ? "text-zinc-300" : "text-zinc-500"}`}>
-            ยืนยันสถานที่นัดรับเรียบร้อยแล้ว สถานะตอนนี้คือรอนัดพบ
+            {canSellerRespond
+              ? "ยืนยันสถานที่นัดรับเรียบร้อยแล้ว หลังส่งมอบสินค้าแล้วกดปุ่มส่งมอบแล้วเพื่อแจ้งผู้ซื้อ"
+              : "ยืนยันสถานที่นัดรับเรียบร้อยแล้ว สถานะตอนนี้คือรอนัดพบ"}
+          </div>
+        ) : null}
+
+        {proposalStatus === "awaiting_buyer_confirmation" ? (
+          <div className={`text-xs ${mine ? "text-zinc-300" : "text-zinc-500"}`}>
+            คนขายแจ้งว่าส่งมอบสินค้าแล้ว ตอนนี้รอผู้ซื้อยืนยันรับของเพื่อปิดธุรกรรม
           </div>
         ) : null}
 
@@ -696,6 +951,19 @@ class MeetupProposalCard extends React.Component {
                 </div>
               </div>
             )}
+          </div>
+        ) : null}
+
+        {canSellerConfirmHandover ? (
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
+              onClick={() => onConfirmHandover?.({ messageId: message?.id })}
+              disabled={responding}
+            >
+              ส่งมอบแล้ว
+            </button>
           </div>
         ) : null}
 

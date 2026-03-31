@@ -2,8 +2,12 @@ import React from "react";
 
 const getStatusBadgeClassName = (status) => {
   switch (`${status ?? ""}`.trim()) {
+    case "preparing_parcel":
+      return "border-indigo-200 bg-indigo-50 text-indigo-700";
     case "awaiting_parcel_pickup":
       return "border-sky-200 bg-sky-50 text-sky-700";
+    case "parcel_in_transit":
+      return "border-blue-200 bg-blue-50 text-blue-700";
     case "reported_to_admin":
       return "border-rose-200 bg-rose-50 text-rose-700";
     case "cancelled":
@@ -83,6 +87,13 @@ export class ShopParcelPaymentVerificationPanel extends React.Component {
                   {review.items?.length ?? 0} รายการ • ยอดรวม {review.getSubtotalLabel?.() ?? "฿0.00"}
                 </div>
 
+                {review.getTrackingLine?.() ? (
+                  <div className="rounded-xl bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
+                    เลขพัสดุ: {review.getTrackingLine()}
+                    {review.getShipmentUpdatedAtLabel?.() && review.getShipmentUpdatedAtLabel() !== "-" ? ` • อัปเดตเมื่อ ${review.getShipmentUpdatedAtLabel()}` : ""}
+                  </div>
+                ) : null}
+
                 <div className="flex items-center justify-between gap-3">
                   <div className="text-xs text-zinc-500">
                     {review.isCancelled?.()
@@ -113,6 +124,8 @@ export class ShopParcelPaymentVerificationPanel extends React.Component {
 export class ShopParcelPaymentVerificationModal extends React.Component {
   state = {
     decisionNote: "",
+    trackingNumber: "",
+    carrier: "",
   };
 
   componentDidMount() {
@@ -131,6 +144,8 @@ export class ShopParcelPaymentVerificationModal extends React.Component {
   syncStateFromReview(review) {
     this.setState({
       decisionNote: review?.adminReport?.reason ?? "",
+      trackingNumber: review?.parcelShipment?.trackingNumber ?? "",
+      carrier: review?.parcelShipment?.carrier ?? "",
     });
   }
 
@@ -142,6 +157,14 @@ export class ShopParcelPaymentVerificationModal extends React.Component {
     this.setState({ decisionNote: event.target.value });
   };
 
+  setTrackingNumber = (event) => {
+    this.setState({ trackingNumber: event.target.value });
+  };
+
+  setCarrier = (event) => {
+    this.setState({ carrier: event.target.value });
+  };
+
   submitAction = (action) => {
     this.props.onSubmitDecision?.({
       action,
@@ -149,15 +172,33 @@ export class ShopParcelPaymentVerificationModal extends React.Component {
     });
   };
 
+  submitShipment = (action) => {
+    this.props.onSubmitShipment?.({
+      action,
+      trackingNumber: this.state.trackingNumber,
+      carrier: this.state.carrier,
+      note: this.state.decisionNote,
+    });
+  };
+
   render() {
     const { review, submitting, error, onClose } = this.props;
-    const { decisionNote } = this.state;
+    const { decisionNote, trackingNumber, carrier } = this.state;
 
     if (!review) return null;
 
+    const currentStatus = review.getEffectiveStatus?.() ?? review.status;
+    const canManageShipment =
+      !["cancelled", "reported_to_admin", "completed", "rejected_by_buyer"].includes(currentStatus);
+    const canEditShipmentDetails =
+      canManageShipment && !["parcel_in_transit", "awaiting_buyer_confirmation"].includes(currentStatus);
+    const canMarkPreparing =
+      canManageShipment && !["parcel_in_transit", "awaiting_buyer_confirmation"].includes(currentStatus);
+    const canMarkShipped = Boolean(`${trackingNumber ?? ""}`.trim()) && canEditShipmentDetails;
+
     return (
-      <div className="fixed inset-0 z-[70] bg-black/40 p-4 overflow-y-auto" onClick={onClose}>
-        <div className="mx-auto my-4 w-full max-w-4xl" onClick={this.stop}>
+      <div className="app-modal-overlay fixed inset-0 z-[70] bg-black/40" onClick={onClose}>
+        <div className="app-modal-card w-full max-w-4xl" onClick={this.stop}>
           <div className="rounded-3xl bg-white shadow-xl border border-zinc-200 p-4 md:p-6 space-y-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -208,10 +249,19 @@ export class ShopParcelPaymentVerificationModal extends React.Component {
                   <div className="text-sm font-semibold text-zinc-900">ข้อมูลผู้ซื้อและที่อยู่จัดส่ง</div>
                   <div className="rounded-xl border border-zinc-200 bg-white p-3 text-sm text-zinc-700">
                     <div>{review.getBuyerLine?.() || review.buyerName || "-"}</div>
+                    {review.buyerShippingAddress?.label ? (
+                      <div className="mt-2 text-sm font-medium text-zinc-800">{review.buyerShippingAddress.label}</div>
+                    ) : null}
                     <div className="mt-2 whitespace-pre-line break-words text-zinc-600">
                       {review.buyerShippingAddress?.address || "ยังไม่ได้ระบุที่อยู่จัดส่ง"}
                     </div>
                   </div>
+                  {review.notes ? (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                      <div className="text-xs font-semibold uppercase tracking-wide text-amber-700">หมายเหตุจากผู้ซื้อ</div>
+                      <div className="mt-1 whitespace-pre-line break-words">{review.notes}</div>
+                    </div>
+                  ) : null}
                   <div className="text-xs text-zinc-500">
                     ส่งข้อมูลเมื่อ {review.getSubmittedAtLabel?.() ?? "-"}
                   </div>
@@ -292,6 +342,50 @@ export class ShopParcelPaymentVerificationModal extends React.Component {
 
                 <section className="rounded-2xl border border-zinc-200 bg-white p-4 space-y-3">
                   <div className="text-sm font-semibold text-zinc-900">การดำเนินการ</div>
+                  <div className="space-y-3 rounded-2xl border border-zinc-200 bg-zinc-50 p-3">
+                    <div className="text-sm font-semibold text-zinc-900">ข้อมูลพัสดุ</div>
+                    <input
+                      type="text"
+                      className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none"
+                      placeholder="เลขพัสดุ"
+                      value={trackingNumber}
+                      onChange={this.setTrackingNumber}
+                      disabled={submitting || !canEditShipmentDetails}
+                    />
+                    <input
+                      type="text"
+                      className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none"
+                      placeholder="บริษัทขนส่ง เช่น Flash, Kerry, ไปรษณีย์ไทย"
+                      value={carrier}
+                      onChange={this.setCarrier}
+                      disabled={submitting || !canEditShipmentDetails}
+                    />
+                    {review.getTrackingLine?.() ? (
+                      <div className="rounded-xl bg-white px-3 py-2 text-sm text-zinc-700">
+                        ปัจจุบัน: {review.getTrackingLine()}
+                        {review.getShipmentUpdatedAtLabel?.() && review.getShipmentUpdatedAtLabel() !== "-" ? ` • ${review.getShipmentUpdatedAtLabel()}` : ""}
+                      </div>
+                    ) : null}
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <button
+                        type="button"
+                        className="rounded-xl border border-indigo-200 px-4 py-2.5 text-sm font-semibold text-indigo-700 hover:bg-indigo-50 disabled:opacity-60"
+                        onClick={() => this.submitShipment("prepare")}
+                        disabled={submitting || !canMarkPreparing}
+                      >
+                        {submitting ? "กำลังบันทึก..." : "กำลังเตรียมส่ง"}
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-60"
+                        onClick={() => this.submitShipment("ship")}
+                        disabled={submitting || !canMarkShipped}
+                      >
+                        {submitting ? "กำลังบันทึก..." : "ส่งพัสดุแล้ว"}
+                      </button>
+                    </div>
+                  </div>
+
                   <div className="flex flex-col gap-2">
                     <button
                       type="button"

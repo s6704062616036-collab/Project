@@ -13,6 +13,7 @@ export class CartPopup extends React.Component {
   state = {
     shopDrafts: {},
     validationError: "",
+    checkoutNote: "",
   };
 
   stop = (e) => e.stopPropagation();
@@ -70,6 +71,9 @@ export class CartPopup extends React.Component {
         shopName: item?.getShopName?.() ?? item?.shopName ?? "ร้านค้า",
         shopAvatarUrl: item?.shopAvatarUrl ?? "",
         shopParcelQrCodeUrl: item?.shopParcelQrCodeUrl ?? "",
+        shopBankName: item?.shopBankName ?? "",
+        shopBankAccountName: item?.shopBankAccountName ?? "",
+        shopBankAccountNumber: item?.shopBankAccountNumber ?? "",
         items: [item],
         subtotal: item?.getLineTotalNumber?.() ?? 0,
       });
@@ -80,6 +84,11 @@ export class CartPopup extends React.Component {
 
   syncDraftsFromItems(items = []) {
     const groups = this.getShopGroups(items);
+    const buyerSavedAddresses = this.getBuyerSavedAddresses();
+    const defaultAddressId =
+      buyerSavedAddresses.find((entry) => entry.isDefault)?.id ||
+      buyerSavedAddresses[0]?.id ||
+      "";
 
     this.setState((state) => {
       const nextShopDrafts = {};
@@ -91,6 +100,7 @@ export class CartPopup extends React.Component {
           parcelPaymentMethod:
             currentDraft?.parcelPaymentMethod ?? ParcelPaymentMethod.QR_CODE,
           meetupLocation: currentDraft?.meetupLocation ?? "",
+          selectedAddressId: currentDraft?.selectedAddressId ?? defaultAddressId,
           receiptFile: currentDraft?.receiptFile ?? null,
           receiptPreviewUrl: currentDraft?.receiptPreviewUrl ?? "",
         };
@@ -138,6 +148,48 @@ export class CartPopup extends React.Component {
     });
   };
 
+  getBuyerSavedAddresses() {
+    const buyer = this.props.buyer ?? {};
+    const savedAddresses = Array.isArray(buyer?.addresses)
+      ? buyer.addresses
+          .map((entry, index) => ({
+            id: `${entry?.id ?? ""}`.trim() || `address-${index + 1}`,
+            label: `${entry?.label ?? ""}`.trim() || `ที่อยู่ ${index + 1}`,
+            name: `${entry?.recipientName ?? buyer?.name ?? ""}`.trim(),
+            phone: `${entry?.phone ?? buyer?.phone ?? ""}`.trim(),
+            address: `${entry?.address ?? ""}`.trim(),
+            isDefault: Boolean(entry?.isDefault),
+          }))
+          .filter((entry) => entry.address)
+      : [];
+
+    if (savedAddresses.length) {
+      const defaultIndex = savedAddresses.findIndex((entry) => entry.isDefault);
+      return savedAddresses.map((entry, index) => ({
+        ...entry,
+        isDefault: index === (defaultIndex >= 0 ? defaultIndex : 0),
+      }));
+    }
+
+    const fallbackAddress = `${buyer?.address ?? ""}`.trim();
+    if (!fallbackAddress) return [];
+
+    return [
+      {
+        id: "address-1",
+        label: "ที่อยู่หลัก",
+        name: `${buyer?.name ?? ""}`.trim(),
+        phone: `${buyer?.phone ?? ""}`.trim(),
+        address: fallbackAddress,
+        isDefault: true,
+      },
+    ];
+  }
+
+  setSelectedAddressId = (shopKey, selectedAddressId) => {
+    this.setShopDraft(shopKey, { selectedAddressId: `${selectedAddressId ?? ""}`.trim() });
+  };
+
   setReceiptFile = (shopKey, receiptFile) => {
     const previousPreviewUrl = this.state.shopDrafts?.[shopKey]?.receiptPreviewUrl ?? "";
     const nextReceiptFile = receiptFile ?? null;
@@ -151,6 +203,13 @@ export class CartPopup extends React.Component {
     });
   };
 
+  setCheckoutNote = (checkoutNote) => {
+    this.setState({
+      checkoutNote: `${checkoutNote ?? ""}`.slice(0, 500),
+      validationError: "",
+    });
+  };
+
   buildCheckoutPayload() {
     const groups = this.getShopGroups(this.props.items);
     if (!groups.length) return null;
@@ -158,6 +217,7 @@ export class CartPopup extends React.Component {
     const buyerName = `${this.props.buyer?.name ?? ""}`.trim();
     const buyerPhone = `${this.props.buyer?.phone ?? ""}`.trim();
     const buyerAddress = `${this.props.buyer?.address ?? ""}`.trim();
+    const buyerSavedAddresses = this.getBuyerSavedAddresses();
     const shopOrders = [];
 
     for (const group of groups) {
@@ -165,10 +225,16 @@ export class CartPopup extends React.Component {
       const shippingMethod = ShippingMethod.normalize(draft.shippingMethod);
       const parcelPaymentMethod = ParcelPaymentMethod.normalize(draft.parcelPaymentMethod);
       const meetupLocation = `${draft?.meetupLocation ?? ""}`.trim();
+      const selectedAddressId = `${draft?.selectedAddressId ?? ""}`.trim();
       const receiptFile = draft?.receiptFile ?? null;
       const effectiveReceiptFile = ParcelPaymentMethod.requiresReceipt(parcelPaymentMethod)
         ? receiptFile
         : null;
+      const selectedAddress =
+        buyerSavedAddresses.find((entry) => entry.id === selectedAddressId) ||
+        buyerSavedAddresses.find((entry) => entry.isDefault) ||
+        buyerSavedAddresses[0] ||
+        null;
 
       if (ShippingMethod.isMeetup(shippingMethod) && !meetupLocation) {
         this.setState({
@@ -190,6 +256,17 @@ export class CartPopup extends React.Component {
 
       if (
         ShippingMethod.isParcel(shippingMethod) &&
+        ParcelPaymentMethod.requiresSellerBankAccount(parcelPaymentMethod) &&
+        !(group.shopBankName && group.shopBankAccountName && group.shopBankAccountNumber)
+      ) {
+        this.setState({
+          validationError: `à¸£à¹‰à¸²à¸™ ${group.shopName} à¸¢à¸±à¸‡à¹„à¸¡à¹ˆà¹„à¸”à¹‰à¸•à¸±à¹‰à¸‡à¸„à¹ˆà¸²à¸šà¸±à¸à¸Šà¸µà¸˜à¸™à¸²à¸„à¸²à¸£à¸£à¸±à¸šà¹‚à¸­à¸™`,
+        });
+        return null;
+      }
+
+      if (
+        ShippingMethod.isParcel(shippingMethod) &&
         ParcelPaymentMethod.requiresReceipt(parcelPaymentMethod) &&
         !effectiveReceiptFile
       ) {
@@ -199,7 +276,10 @@ export class CartPopup extends React.Component {
         return null;
       }
 
-      if (ShippingMethod.isParcel(shippingMethod) && !buyerAddress) {
+      if (
+        ShippingMethod.isParcel(shippingMethod) &&
+        !(selectedAddress?.address || buyerAddress)
+      ) {
         this.setState({
           validationError: "กรุณากรอกที่อยู่ในโปรไฟล์ก่อนเลือกส่งพัสดุ",
         });
@@ -217,15 +297,20 @@ export class CartPopup extends React.Component {
         receiptFile: effectiveReceiptFile,
         buyerShippingAddress: ShippingMethod.isParcel(shippingMethod)
           ? {
-              name: buyerName,
-              phone: buyerPhone,
-              address: buyerAddress,
+              addressId: selectedAddress?.id ?? "",
+              label: selectedAddress?.label ?? "",
+              name: selectedAddress?.name ?? buyerName,
+              phone: selectedAddress?.phone ?? buyerPhone,
+              address: selectedAddress?.address ?? buyerAddress,
             }
           : null,
       });
     }
 
-    return { shopOrders };
+    return {
+      shopOrders,
+      notes: `${this.state.checkoutNote ?? ""}`.trim(),
+    };
   }
 
   submitCheckout = () => {
@@ -246,19 +331,20 @@ export class CartPopup extends React.Component {
       onOpenItem,
       onRemoveItem,
     } = this.props;
-    const { validationError, shopDrafts } = this.state;
+    const { validationError, shopDrafts, checkoutNote } = this.state;
     const shopGroups = this.getShopGroups(items);
+    const buyerSavedAddresses = this.getBuyerSavedAddresses();
     const buyerName = `${this.props.buyer?.name ?? ""}`.trim();
     const buyerPhone = `${this.props.buyer?.phone ?? ""}`.trim();
     const buyerAddress = `${this.props.buyer?.address ?? ""}`.trim();
 
     return (
-      <div className="fixed inset-0 z-50 overflow-y-auto px-4 pb-4 pt-24 md:px-0 md:pb-0 md:pt-0" onClick={onClose}>
+      <div className="app-popover-overlay fixed inset-0 z-50" onClick={onClose}>
         <div
-          className="mx-auto w-full max-w-[34rem] md:mr-5 md:mt-23 md:w-[34rem] md:max-w-[calc(100vw-2rem)]"
+          className="app-drawer-panel md:mr-5"
           onClick={this.stop}
         >
-          <div className="max-h-[calc(100dvh-7rem)] overflow-y-auto hide-scrollbar rounded-3xl border border-zinc-200 bg-white p-4 shadow-xl space-y-4 md:max-h-[calc(100dvh-8rem)]">
+          <div className="app-sheet-card app-surface-card hide-scrollbar rounded-3xl p-4 space-y-4">
             <div className="flex items-center justify-between">
               <div className="text-base font-semibold text-zinc-900">ตะกร้าสินค้า</div>
               <div className="text-xs text-zinc-500">แยกการจัดส่งตามร้าน</div>
@@ -295,9 +381,15 @@ export class CartPopup extends React.Component {
                   const parcelPaymentMethod = ParcelPaymentMethod.normalize(
                     shopDraft?.parcelPaymentMethod,
                   );
+                  const selectedAddressId = `${shopDraft?.selectedAddressId ?? ""}`.trim();
+                  const selectedAddress =
+                    buyerSavedAddresses.find((entry) => entry.id === selectedAddressId) ||
+                    buyerSavedAddresses.find((entry) => entry.isDefault) ||
+                    buyerSavedAddresses[0] ||
+                    null;
 
                   return (
-                    <section key={group.shopKey} className="rounded-2xl border border-zinc-200 p-3 space-y-3">
+                    <section key={group.shopKey} className="app-soft-panel rounded-2xl p-3 space-y-3">
                       <div className="flex items-center justify-between gap-3">
                         <div className="flex min-w-0 items-center gap-3">
                           <div className="h-11 w-11 shrink-0 rounded-full bg-zinc-100 overflow-hidden grid place-items-center">
@@ -375,13 +467,14 @@ export class CartPopup extends React.Component {
                               <button
                                 key={`${group.shopKey}-${method}`}
                                 type="button"
-                                className={`rounded-xl border px-3 py-2 text-sm font-semibold transition ${
-                                  active
-                                    ? "border-zinc-900 bg-zinc-900 text-white"
-                                    : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50"
-                                }`}
-                                onClick={() => this.setShippingMethod(group.shopKey, method)}
-                              >
+                      className={`rounded-xl border px-3 py-2 text-sm font-semibold transition ${
+                        active
+                          ? "border-amber-300 bg-[#F4D03E] text-zinc-900"
+                          : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50"
+                      }`}
+                      onClick={() => this.setShippingMethod(group.shopKey, method)}
+                      aria-pressed={active}
+                    >
                                 {ShippingMethod.getLabel(method)}
                               </button>
                             );
@@ -390,7 +483,7 @@ export class CartPopup extends React.Component {
                       </div>
 
                       {ShippingMethod.isMeetup(shippingMethod) ? (
-                        <div className="space-y-2 rounded-2xl bg-zinc-50 p-3">
+                        <div className="app-soft-panel space-y-2 rounded-2xl p-3">
                           <div className="text-sm font-medium text-zinc-800">สถานที่นัดรับ</div>
                           <textarea
                             className="min-h-24 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none"
@@ -405,7 +498,7 @@ export class CartPopup extends React.Component {
                       ) : null}
 
                       {ShippingMethod.isParcel(shippingMethod) ? (
-                        <div className="space-y-3 rounded-2xl bg-zinc-50 p-3">
+                        <div className="app-soft-panel space-y-3 rounded-2xl p-3">
                           <div className="space-y-2">
                             <div className="text-sm font-medium text-zinc-800">การชำระเงินสำหรับพัสดุ</div>
                             <div className="grid gap-2 sm:grid-cols-2">
@@ -415,13 +508,14 @@ export class CartPopup extends React.Component {
                                   <button
                                     key={`${group.shopKey}-${method}`}
                                     type="button"
-                                    className={`rounded-xl border px-3 py-2 text-sm font-semibold transition ${
-                                      active
-                                        ? "border-zinc-900 bg-zinc-900 text-white"
-                                        : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50"
-                                    }`}
-                                    onClick={() => this.setParcelPaymentMethod(group.shopKey, method)}
-                                  >
+                          className={`rounded-xl border px-3 py-2 text-sm font-semibold transition ${
+                            active
+                              ? "border-amber-300 bg-[#F4D03E] text-zinc-900"
+                              : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50"
+                          }`}
+                          onClick={() => this.setParcelPaymentMethod(group.shopKey, method)}
+                          aria-pressed={active}
+                        >
                                     {ParcelPaymentMethod.getLabel(method)}
                                   </button>
                                 );
@@ -431,12 +525,47 @@ export class CartPopup extends React.Component {
 
                           <div className="rounded-2xl border border-zinc-200 bg-white p-3 space-y-1">
                             <div className="text-sm font-medium text-zinc-800">ที่อยู่จัดส่งของผู้ซื้อ</div>
-                            <div className="text-sm text-zinc-700">
-                              {buyerName || buyerPhone ? [buyerName, buyerPhone].filter(Boolean).join(" | ") : "ยังไม่ได้ระบุชื่อหรือเบอร์โทร"}
-                            </div>
-                            <div className="text-sm text-zinc-600 whitespace-pre-line break-words">
-                              {buyerAddress || "ยังไม่ได้ระบุที่อยู่ในโปรไฟล์ กรุณาไปแก้ไขบัญชีก่อนยืนยันการสั่งซื้อ"}
-                            </div>
+                            {buyerSavedAddresses.length ? (
+                              <>
+                                <label className="space-y-1">
+                                  <div className="text-xs text-zinc-500">เลือกที่อยู่ปลายทาง</div>
+                                  <select
+                                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none"
+                                    value={selectedAddress?.id ?? ""}
+                                    onChange={(e) => this.setSelectedAddressId(group.shopKey, e.target.value)}
+                                  >
+                                    {buyerSavedAddresses.map((entry) => (
+                                      <option key={entry.id} value={entry.id}>
+                                        {entry.label}
+                                        {entry.isDefault ? " (หลัก)" : ""}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+                                <div className="text-sm text-zinc-700">
+                                  {[selectedAddress?.name || buyerName, selectedAddress?.phone || buyerPhone]
+                                    .filter(Boolean)
+                                    .join(" | ") || "ยังไม่ได้ระบุชื่อหรือเบอร์โทร"}
+                                </div>
+                                <div className="text-sm text-zinc-600 whitespace-pre-line break-words">
+                                  {selectedAddress?.address ||
+                                    buyerAddress ||
+                                    "ยังไม่ได้ระบุที่อยู่ในโปรไฟล์ กรุณาไปแก้ไขบัญชีก่อนยืนยันการสั่งซื้อ"}
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <div className="text-sm text-zinc-700">
+                                  {buyerName || buyerPhone
+                                    ? [buyerName, buyerPhone].filter(Boolean).join(" | ")
+                                    : "ยังไม่ได้ระบุชื่อหรือเบอร์โทร"}
+                                </div>
+                                <div className="text-sm text-zinc-600 whitespace-pre-line break-words">
+                                  {buyerAddress ||
+                                    "ยังไม่ได้ระบุที่อยู่ในโปรไฟล์ กรุณาไปแก้ไขบัญชีก่อนยืนยันการสั่งซื้อ"}
+                                </div>
+                              </>
+                            )}
                           </div>
 
                           {ParcelPaymentMethod.requiresSellerQrCode(parcelPaymentMethod) ? (
@@ -450,6 +579,11 @@ export class CartPopup extends React.Component {
                                   />
                                 </div>
                                 <div className="space-y-2">
+                                  {group.shopBankAccountName ? (
+                                    <div className="rounded-xl border border-zinc-200 bg-white p-2 text-sm text-zinc-700">
+                                      ชื่อบัญชี: <span className="font-semibold text-zinc-900">{group.shopBankAccountName}</span>
+                                    </div>
+                                  ) : null}
                                   <div className="rounded-xl border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
                                     ร้านนี้เปิดรับการชำระแบบ QR แล้ว หลังโอนเงินให้แนบใบเสร็จเพื่อส่งคำสั่งซื้อไปให้คนขายตรวจสอบ
                                   </div>
@@ -470,6 +604,36 @@ export class CartPopup extends React.Component {
                             ) : (
                               <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
                                 ร้านนี้ยังไม่ได้อัปโหลด QR code รับชำระ จึงยังไม่สามารถเลือกส่งพัสดุได้
+                              </div>
+                            )
+                          ) : ParcelPaymentMethod.requiresSellerBankAccount(parcelPaymentMethod) ? (
+                            group.shopBankName && group.shopBankAccountName && group.shopBankAccountNumber ? (
+                              <div className="space-y-3">
+                                <div className="rounded-2xl border border-zinc-200 bg-white p-3 space-y-1">
+                                  <div className="text-sm font-medium text-zinc-800">บัญชีสำหรับรับโอน</div>
+                                  <div className="text-sm text-zinc-700">ธนาคาร: {group.shopBankName}</div>
+                                  <div className="text-sm text-zinc-700">ชื่อบัญชี: {group.shopBankAccountName}</div>
+                                  <div className="text-sm font-semibold text-zinc-900">เลขบัญชี: {group.shopBankAccountNumber}</div>
+                                </div>
+                                <div className="rounded-xl border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
+                                  โอนเข้าบัญชีของร้านแล้วแนบสลิปเพื่อส่งคำสั่งซื้อไปให้คนขายตรวจสอบ
+                                </div>
+                                <label className="space-y-1">
+                                  <div className="text-sm text-zinc-700">แนบรูปใบเสร็จ</div>
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-100 file:px-3 file:py-1.5"
+                                    onChange={(e) => this.setReceiptFile(group.shopKey, e.target.files?.[0] ?? null)}
+                                  />
+                                </label>
+                                {shopDraft?.receiptFile ? (
+                                  <div className="text-xs text-zinc-500">{shopDraft.receiptFile.name}</div>
+                                ) : null}
+                              </div>
+                            ) : (
+                              <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                                ร้านนี้ยังไม่ได้ตั้งค่าบัญชีธนาคารรับโอน จึงยังไม่สามารถเลือกวิธีนี้ได้
                               </div>
                             )
                           ) : (
@@ -496,12 +660,24 @@ export class CartPopup extends React.Component {
               </div>
             ) : null}
 
-            <div className="rounded-xl bg-zinc-50 px-3 py-2.5 text-sm text-zinc-700">
+            <div className="app-soft-panel rounded-xl px-3 py-2.5 text-sm text-zinc-700">
               รวมทั้งหมด: <span className="font-semibold text-zinc-900">{totalLabel}</span>
             </div>
 
-            <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-xs text-zinc-600">
+            <div className="app-soft-panel rounded-xl px-3 py-2.5 text-xs text-zinc-600">
               การกดสั่งซื้อจะสร้างคำขอแยกตามร้าน และส่งแจ้งเตือนไปยังห้องแชทของร้านค้านั้นอัตโนมัติ
+            </div>
+
+            <div className="space-y-1">
+              <div className="text-sm font-medium text-zinc-700">หมายเหตุถึงร้านค้า</div>
+              <textarea
+                className="min-h-24 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none"
+                placeholder="เช่น โทรก่อนส่ง ฝากไว้หน้าบ้าน หรือรายละเอียดเพิ่มเติมอื่นๆ"
+                value={checkoutNote}
+                maxLength={500}
+                onChange={(e) => this.setCheckoutNote(e.target.value)}
+              />
+              <div className="text-right text-xs text-zinc-500">{`${checkoutNote.length}/500`}</div>
             </div>
 
             <div className="flex justify-end">
@@ -538,10 +714,10 @@ export class ProfilePopup extends React.Component {
     } = this.props;
 
     return (
-      <div className="fixed inset-0 z-50" onClick={onClose}>
-        <div className="absolute right-5 top-23 w-[20rem] max-w-[calc(100vw-2rem)]" onClick={this.stop}>
-          <div className="rounded-3xl border border-zinc-200 bg-white shadow-xl p-4 space-y-4">
-            <div className="rounded-2xl bg-zinc-50 p-3">
+      <div className="app-popover-overlay fixed inset-0 z-50" onClick={onClose}>
+        <div className="app-popover-panel md:mr-5" onClick={this.stop}>
+          <div className="app-sheet-card app-surface-card hide-scrollbar rounded-3xl p-4 space-y-4">
+            <div className="app-soft-panel rounded-2xl p-3">
               <div className="flex items-center gap-3">
                 <div className="h-12 w-12 rounded-full bg-zinc-200 overflow-hidden grid place-items-center">
                   {user?.avatarUrl ? (

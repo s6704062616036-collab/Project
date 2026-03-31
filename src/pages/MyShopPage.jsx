@@ -6,10 +6,28 @@ import { ShopProfile } from "../models/ShopProfile";
 import { ProductCategory } from "../models/ProductCategory";
 import { CategoryService } from "../services/CategoryService";
 import { ProfilePopup } from "../components/HeaderActionPopups";
+import { SavedAddressesEditor } from "../components/SavedAddressesEditor";
+import { NotificationBellButton } from "../components/NotificationBellButton";
 import {
   ShopParcelPaymentVerificationModal,
   ShopParcelPaymentVerificationPanel,
 } from "../components/ShopParcelPaymentVerification";
+
+const BANK_OPTIONS = [
+  "",
+  "กสิกรไทย (KBANK)",
+  "ไทยพาณิชย์ (SCB)",
+  "กรุงเทพ (BBL)",
+  "กรุงไทย (KTB)",
+  "กรุงศรี (BAY)",
+  "ทหารไทยธนชาต (TTB)",
+  "ออมสิน (GSB)",
+  "ธ.ก.ส. (BAAC)",
+  "ซีไอเอ็มบีไทย (CIMB)",
+  "พร้อมเพย์ (PromptPay)",
+];
+
+const ADMIN_CONTACT_EMAIL = "s6704062616045@email.kmutnb.ac.th";
 
 export class MyShopPage extends React.Component {
   state = {
@@ -142,6 +160,20 @@ export class MyShopPage extends React.Component {
     }
   };
 
+  canSellProducts = () => this.state.shopProfile?.isApprovedKyc?.() ?? false;
+
+  getSellLockMessage = () => {
+    const shopProfile = this.state.shopProfile;
+    if (shopProfile?.isApprovedKyc?.()) return "";
+    if (shopProfile?.isPendingKyc?.()) {
+      return "ร้านของคุณกำลังรอ Admin อนุมัติ KYC จึงยังไม่สามารถลงขายสินค้าได้";
+    }
+    if (shopProfile?.isRejectedKyc?.()) {
+      return "ร้านของคุณยังไม่ผ่าน KYC กรุณาแก้ไขข้อมูลร้านและส่งตรวจสอบใหม่ก่อนลงขายสินค้า";
+    }
+    return "กรุณากรอกข้อมูลร้านและผ่านการอนุมัติ KYC ก่อนลงขายสินค้า";
+  };
+
   openPaymentReviewModal = (review) => {
     this.setState({
       showPaymentReviewModal: true,
@@ -263,7 +295,78 @@ export class MyShopPage extends React.Component {
     }
   };
 
+  submitParcelShipmentUpdate = async ({ action, trackingNumber, carrier, note } = {}) => {
+    const review = this.state.selectedPaymentReview;
+    const orderId = `${review?.orderId ?? ""}`.trim();
+    const shopOrderKey = `${review?.shopOrderKey ?? ""}`.trim();
+    const normalizedAction = `${action ?? ""}`.trim();
+
+    if (!orderId || !shopOrderKey || !normalizedAction) return;
+
+    this.setState({
+      paymentReviewSubmitting: true,
+      paymentReviewsError: "",
+      paymentReviewsDone: "",
+    });
+    try {
+      const result = await this.myShopService.updateParcelShipment({
+        orderId,
+        shopOrderKey,
+        action: normalizedAction,
+        trackingNumber,
+        carrier,
+        note,
+      });
+
+      let nextReviews = Array.isArray(this.state.paymentReviews) ? this.state.paymentReviews : [];
+      let refreshedReview = result?.review ?? null;
+
+      try {
+        const { reviews } = await this.myShopService.listParcelPaymentReviews();
+        nextReviews = reviews ?? [];
+        refreshedReview =
+          nextReviews.find(
+            (item) => item?.orderId === orderId && item?.shopOrderKey === shopOrderKey,
+          ) ?? refreshedReview;
+      } catch {
+        if (refreshedReview) {
+          const exists = nextReviews.some(
+            (item) => item?.orderId === orderId && item?.shopOrderKey === shopOrderKey,
+          );
+          nextReviews = exists
+            ? nextReviews.map((item) =>
+                item?.orderId === orderId && item?.shopOrderKey === shopOrderKey
+                  ? refreshedReview
+                  : item,
+              )
+            : [refreshedReview, ...nextReviews];
+        }
+      }
+
+      this.setState({
+        paymentReviews: nextReviews,
+        selectedPaymentReview: refreshedReview,
+        paymentReviewsDone: result?.message ?? "อัปเดตข้อมูลพัสดุแล้ว",
+      });
+    } catch (e) {
+      this.setState({
+        paymentReviewsError: e?.message ?? "อัปเดตข้อมูลพัสดุไม่สำเร็จ",
+      });
+    } finally {
+      this.setState({ paymentReviewSubmitting: false });
+    }
+  };
+
   openCreatePopup = () => {
+    if (!this.canSellProducts()) {
+      this.setState({
+        showCreatePopup: false,
+        error: this.getSellLockMessage(),
+        done: "",
+      });
+      return;
+    }
+
     this.revokePreviewUrls(this.state.imagePreviewUrls);
     this.setState({
       showCreatePopup: true,
@@ -435,6 +538,7 @@ export class MyShopPage extends React.Component {
         email: profileDraft?.email ?? "",
         phone: profileDraft?.phone ?? "",
         address: profileDraft?.address ?? "",
+        addresses: Array.isArray(profileDraft?.addresses) ? profileDraft.addresses : [],
       };
 
       const result = profileAvatarFile
@@ -488,7 +592,7 @@ export class MyShopPage extends React.Component {
   };
 
   setImageFiles = (files) => {
-    const safeFiles = Array.isArray(files) ? files.filter(Boolean) : [];
+    const safeFiles = (Array.isArray(files) ? files.filter(Boolean) : []).slice(0, 5);
     this.revokePreviewUrls(this.state.imagePreviewUrls);
 
     const imagePreviewUrls =
@@ -542,7 +646,7 @@ export class MyShopPage extends React.Component {
   };
 
   setEditImageFiles = (files) => {
-    const safeFiles = Array.isArray(files) ? files.filter(Boolean) : [];
+    const safeFiles = (Array.isArray(files) ? files.filter(Boolean) : []).slice(0, 5);
     this.revokePreviewUrls(this.state.editImagePreviewUrls);
 
     const editImagePreviewUrls =
@@ -559,6 +663,11 @@ export class MyShopPage extends React.Component {
   };
 
   submitEditProduct = async () => {
+    if (!this.canSellProducts()) {
+      this.setState({ error: this.getSellLockMessage() });
+      return;
+    }
+
     const { editDraftProduct, editImageFiles } = this.state;
     const validationError = editDraftProduct.validate({ imageFiles: editImageFiles });
     if (validationError) {
@@ -647,6 +756,11 @@ export class MyShopPage extends React.Component {
   };
 
   submitProduct = async () => {
+    if (!this.canSellProducts()) {
+      this.setState({ error: this.getSellLockMessage() });
+      return;
+    }
+
     const { draftProduct, imageFiles } = this.state;
     const validationError = draftProduct.validate({ imageFiles });
     if (validationError) {
@@ -692,31 +806,64 @@ export class MyShopPage extends React.Component {
 
   renderProducts() {
     const { products } = this.state;
+    const canSellProducts = this.canSellProducts();
+    const sellLockMessage = this.getSellLockMessage();
 
     if (!products.length) {
       return (
         <div className="min-h-80 grid place-items-center">
+          <div className="w-full max-w-xl rounded-3xl border border-dashed border-zinc-300 bg-zinc-50 px-6 py-10 text-center space-y-4">
+            <div className="text-base font-semibold text-zinc-800">ยังไม่มีสินค้าที่ลงขาย</div>
+            <div className="text-sm text-zinc-500">เริ่มเพิ่มสินค้าแรกของร้านคุณได้จากปุ่มด้านล่าง</div>
           <button
-            className="h-24 w-24 rounded-full border-2 border-dashed border-zinc-300 text-5xl font-light text-zinc-500 hover:bg-zinc-50"
+            type="button"
+            className={`inline-flex items-center justify-center rounded-2xl border px-6 py-3 text-base font-semibold shadow-sm transition ${
+              canSellProducts
+                ? "border-zinc-900 bg-zinc-900 text-white hover:bg-zinc-800"
+                : "border-zinc-200 bg-zinc-50 text-zinc-300 cursor-not-allowed"
+            }`}
             onClick={this.openCreatePopup}
-            title="เพิ่มสินค้า"
+            title={canSellProducts ? "เพิ่มสินค้า" : sellLockMessage}
+            disabled={!canSellProducts}
           >
-            +
+            + เพิ่มสินค้า
           </button>
+          {!canSellProducts ? (
+            <div className="max-w-md text-center text-sm text-zinc-500">{sellLockMessage}</div>
+          ) : null}
+          </div>
         </div>
       );
     }
 
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {products.map((product, index) => (
-          <ProductCard
-            key={product.id || `${product.name}-${index}`}
-            product={product}
-            onEditProduct={this.openEditPopup}
-            onDeleteProduct={this.openDeleteConfirmPopup}
-          />
-        ))}
+      <div className="space-y-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {products.map((product, index) => (
+            <ProductCard
+              key={product.id || `${product.name}-${index}`}
+              product={product}
+              onEditProduct={this.openEditPopup}
+              onDeleteProduct={this.openDeleteConfirmPopup}
+            />
+          ))}
+        </div>
+
+        <div className="flex justify-center">
+          <button
+            type="button"
+            className={`inline-flex items-center justify-center rounded-2xl border px-6 py-3 text-base font-semibold shadow-sm transition ${
+              canSellProducts
+                ? "border-zinc-900 bg-zinc-900 text-white hover:bg-zinc-800"
+                : "border-zinc-200 bg-zinc-50 text-zinc-300 cursor-not-allowed"
+            }`}
+            onClick={this.openCreatePopup}
+            title={canSellProducts ? "เพิ่มสินค้า" : sellLockMessage}
+            disabled={!canSellProducts}
+          >
+            + เพิ่มสินค้า
+          </button>
+        </div>
       </div>
     );
   }
@@ -787,14 +934,11 @@ export class MyShopPage extends React.Component {
             </div>
 
             <div className="flex items-center gap-2">
-              {products.length ? (
-                <button
-                  className="rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm font-medium"
-                  onClick={this.openCreatePopup}
-                >
-                  + เพิ่มสินค้า
-                </button>
-              ) : null}
+              <NotificationBellButton
+                count={this.props.notificationUnreadCount}
+                onClick={() => this.props.onGoNotifications?.()}
+                className="h-10 w-10 rounded-xl bg-[#F4D03E] border border-zinc-200 grid place-items-center"
+              />
 
               <button
                 type="button"
@@ -912,6 +1056,7 @@ export class MyShopPage extends React.Component {
             error={paymentReviewsError}
             onClose={this.closePaymentReviewModal}
             onSubmitDecision={this.submitPaymentReviewDecision}
+            onSubmitShipment={this.submitParcelShipmentUpdate}
           />
         ) : null}
 
@@ -982,6 +1127,9 @@ class ShopSettingsCard extends React.Component {
       "";
     const citizenIdLocked = shopMeta?.isCitizenIdLocked?.() ?? false;
     const canDirectSave = shopMeta?.canDirectSave?.({ hasNewQrFile: Boolean(qrFile) }) ?? false;
+    const bankOptions = BANK_OPTIONS.includes(shopDraft?.bankName ?? "")
+      ? BANK_OPTIONS
+      : [...BANK_OPTIONS, shopDraft?.bankName ?? ""].filter(Boolean);
     const actionLabel = canDirectSave
       ? "บันทึกข้อมูลร้าน"
       : shopMeta?.hasPendingSubmission?.()
@@ -1039,6 +1187,17 @@ class ShopSettingsCard extends React.Component {
           {shopMeta?.moderationNote ? ` หมายเหตุจาก Admin: ${shopMeta.moderationNote}` : ""}
         </div>
 
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-zinc-700">
+          <span className="font-semibold text-zinc-900">ติดต่อ Admin:</span>{" "}
+          หากมีปัญหาเรื่องการตรวจสอบ KYC หรือข้อมูลร้านค้า สามารถติดต่อได้ที่{" "}
+          <a
+            href={`mailto:${ADMIN_CONTACT_EMAIL}`}
+            className="font-semibold text-amber-700 underline decoration-amber-400 underline-offset-2"
+          >
+            {ADMIN_CONTACT_EMAIL}
+          </a>
+        </div>
+
         {loading ? <div className="text-sm text-zinc-500">กำลังโหลดข้อมูลร้าน...</div> : null}
         {error ? (
           <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>
@@ -1072,6 +1231,59 @@ class ShopSettingsCard extends React.Component {
                 {citizenIdLocked
                   ? "เลขบัตรประชาชนถูกล็อกหลังได้รับอนุมัติ KYC แล้ว"
                   : "กรอกได้เฉพาะตัวเลข 13 หลัก"}
+              </div>
+            </label>
+
+            <label className="space-y-1">
+              <div className="text-sm text-zinc-600">วันเดือนปีเกิด</div>
+              <input
+                type="date"
+                className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none"
+                value={shopDraft?.birthDate ?? ""}
+                onChange={(e) => onChangeField?.("birthDate", e.target.value)}
+              />
+              <div className="text-xs text-zinc-500">ใช้ประกอบการตรวจสอบ KYC ของผู้ขาย</div>
+            </label>
+
+            <label className="space-y-1">
+              <div className="text-sm text-zinc-600">ธนาคารสำหรับรับโอน</div>
+              <select
+                className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none"
+                value={shopDraft?.bankName ?? ""}
+                onChange={(e) => onChangeField?.("bankName", e.target.value)}
+              >
+                <option value="">-- เลือกธนาคาร --</option>
+                {bankOptions
+                  .filter((option) => option)
+                  .map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+              </select>
+            </label>
+
+            <label className="space-y-1">
+              <div className="text-sm text-zinc-600">ชื่อบัญชีธนาคาร</div>
+              <input
+                className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none"
+                value={shopDraft?.bankAccountName ?? ""}
+                onChange={(e) => onChangeField?.("bankAccountName", e.target.value)}
+                placeholder="ชื่อเจ้าของบัญชี"
+              />
+            </label>
+
+            <label className="space-y-1 md:col-span-2">
+              <div className="text-sm text-zinc-600">เลขบัญชีธนาคาร</div>
+              <input
+                inputMode="numeric"
+                className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none"
+                value={shopDraft?.bankAccountNumber ?? ""}
+                onChange={(e) => onChangeField?.("bankAccountNumber", e.target.value)}
+                placeholder="กรอกเฉพาะตัวเลข"
+              />
+              <div className="text-xs text-zinc-500">
+                ถ้ากรอกครบ ผู้ซื้อจะสามารถเลือกชำระแบบโอนเข้าบัญชีธนาคารได้
               </div>
             </label>
 
@@ -1268,7 +1480,7 @@ class CreateProductModal extends React.Component {
             </label>
 
             <label className="space-y-1">
-              <div className="text-sm text-zinc-600">หมวดหมู่สินค้า</div>
+              <div className="text-sm text-amber-500">หมวดหมู่สินค้า</div>
               <select
                 className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none"
                 value={draftProduct.category}
@@ -1422,7 +1634,7 @@ class EditProductModal extends React.Component {
             </label>
 
             <label className="space-y-1">
-              <div className="text-sm text-zinc-600">หมวดหมู่สินค้า</div>
+              <div className="text-sm text-amber-500">หมวดหมู่สินค้า</div>
               <select
                 className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none"
                 value={draftProduct.category}
@@ -1647,6 +1859,20 @@ class EditProfileModal extends React.Component {
               <Field label="ที่อยู่" value={user?.address} onChange={(v) => onChangeField("address", v)} full />
             </div>
           </div>
+
+          <SavedAddressesEditor
+            addresses={user?.addresses}
+            defaultName={user?.name}
+            defaultPhone={user?.phone}
+            onChange={(nextAddresses) => {
+              onChangeField("addresses", nextAddresses);
+              const primaryAddress =
+                (nextAddresses ?? []).find((entry) => entry?.isDefault)?.address ||
+                nextAddresses?.[0]?.address ||
+                "";
+              onChangeField("address", primaryAddress);
+            }}
+          />
 
           <div className="flex flex-wrap items-center justify-between gap-3">
             <button

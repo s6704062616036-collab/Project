@@ -6,6 +6,7 @@ import { CartService } from "../services/CartService";
 import { ContentReportService } from "../services/ContentReportService";
 import { ContentReportModal } from "../components/ContentReportModal";
 import { CartPopup, ProfilePopup } from "../components/HeaderActionPopups";
+import { NotificationBellButton } from "../components/NotificationBellButton";
 
 export class SellerStorefrontPage extends React.Component {
   state = {
@@ -33,6 +34,7 @@ export class SellerStorefrontPage extends React.Component {
 
   componentDidMount() {
     this.loadStorefront();
+    this.loadCartItems();
   }
 
   componentDidUpdate(prevProps) {
@@ -221,7 +223,10 @@ export class SellerStorefrontPage extends React.Component {
     this.setState({ checkingOut: true, cartError: "", cartDone: "" });
     try {
       const result = await this.cartService.checkout(checkoutPayload);
-      await this.loadCartItems();
+      await Promise.all([
+        this.loadCartItems(),
+        this.loadStorefront(),
+      ]);
       this.setState({
         cartDone: result?.message ?? "สั่งซื้อเรียบร้อย",
       });
@@ -282,17 +287,27 @@ export class SellerStorefrontPage extends React.Component {
     const shopName = shop?.getDisplayName?.() ?? "ร้านค้าผู้ขาย";
     const shopDescription = `${shop?.description ?? ""}`.trim();
     const shopAvatarUrl = `${shop?.avatarUrl ?? ""}`.trim();
+    const shopEmail = `${shop?.email ?? ""}`.trim();
+    const shopPhone = `${shop?.phone ?? ""}`.trim();
+    const soldProductsCount = Number(shop?.soldProductsCount ?? 0) || 0;
+    const availableProductsCount = Number(shop?.availableProductsCount ?? products.length) || products.length;
     const cartTotalLabel = this.getCartTotalLabel();
+    const cartBadgeCount = (cartItems ?? []).reduce(
+      (sum, item) => sum + (Number(item?.quantity) || 0),
+      0,
+    );
+    const chatUnreadCount = Number(this.props.chatUnreadCount ?? 0) || 0;
+    const notificationUnreadCount = Number(this.props.notificationUnreadCount ?? 0) || 0;
 
     return (
       <div className="min-h-dvh bg-zinc-50">
-        <div className="sticky top-0 z-40 bg-[#A4E3D8] border-b border-zinc-200">
+        <div className="app-topbar-shell sticky top-0 z-40 bg-[#A4E3D8] border-b border-zinc-200">
           <div className="mx-auto max-w-350 px-4 py-5 flex items-center gap-8">
             <button
               type="button"
               onClick={this.props.onGoHome}
               title="กลับหน้าแรก"
-              className="shrink-0 rounded-xl border border-zinc-200 bg-white p-0"
+              className="app-logo-button shrink-0 rounded-[1.2rem] p-0"
             >
               <img
                 src="/App logo.jpg"
@@ -302,7 +317,7 @@ export class SellerStorefrontPage extends React.Component {
             </button>
             <form className="flex-1" onSubmit={this.onSearchSubmit}>
               <input
-                className="w-full rounded-xl border bg-white border-zinc-200 px-3 py-2 text-sm outline-none"
+                className="app-search-field"
                 placeholder="ค้นหาสินค้า..."
                 value={searchKeyword}
                 onChange={(e) => this.onSearchChange(e.target.value)}
@@ -310,23 +325,35 @@ export class SellerStorefrontPage extends React.Component {
             </form>
 
             <button
-              className="h-10 w-10 rounded-xl bg-[#F4D03E] border border-zinc-200 grid place-items-center"
+              className="app-icon-button relative grid h-10 w-10 place-items-center rounded-xl"
               onClick={this.openCartPopup}
               title="ตะกร้า"
             >
               <img src="/cart.svg" alt="ตะกร้า" className="h-5 w-5 object-contain" />
+              {cartBadgeCount > 0 ? (
+                <span className="absolute -right-1.5 -top-1.5 min-w-[1.25rem] rounded-full bg-zinc-900 px-1 py-0.5 text-[10px] font-bold leading-none text-white">
+                  {cartBadgeCount > 99 ? "99+" : cartBadgeCount}
+                </span>
+              ) : null}
             </button>
 
+            <NotificationBellButton
+              unreadCount={notificationUnreadCount}
+              onClick={this.props.onGoNotifications}
+              className="app-icon-button relative grid h-10 w-10 place-items-center rounded-xl"
+            />
+
             <button
-              className="h-10 w-10 rounded-xl bg-[#F4D03E] border border-zinc-200 grid place-items-center"
+              className="app-icon-button relative grid h-10 w-10 place-items-center rounded-xl"
               onClick={() => this.props.onGoChat?.()}
+              data-chat-unread={chatUnreadCount > 0 ? (chatUnreadCount > 99 ? "99+" : `${chatUnreadCount}`) : ""}
               title="แชท"
             >
               <img src="/chat.svg" alt="แชท" className="h-5 w-5 object-contain" />
             </button>
 
             <button
-              className="h-10 w-10 rounded-xl bg-[#F4D03E] text-white grid place-items-center"
+              className="app-icon-button grid h-10 w-10 place-items-center rounded-xl"
               onClick={this.openProfilePopup}
               title="บัญชี"
             >
@@ -336,7 +363,7 @@ export class SellerStorefrontPage extends React.Component {
         </div>
 
         <div className="mx-auto max-w-375 px-4 py-6">
-          <div className="rounded-2xl bg-white shadow p-4 md:p-6 space-y-6">
+          <div className="app-page-section app-main-panel rounded-2xl p-4 md:p-6 space-y-6">
             {loadingStorefront ? (
               <div className="text-sm text-zinc-500">กำลังโหลดข้อมูลหน้าร้านจากฐานข้อมูล...</div>
             ) : null}
@@ -366,14 +393,15 @@ export class SellerStorefrontPage extends React.Component {
                         {this.renderShopAvatar(shopName, shopAvatarUrl)}
                       </div>
                       <div className="space-y-2">
-                        <div className="inline-flex w-fit rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                      <div className="app-hero-badge inline-flex w-fit rounded-full px-2.5 py-1 text-xs font-semibold">
                           โปรไฟล์ร้านค้า
                         </div>
                         <div className="text-2xl font-semibold text-zinc-900 break-words">
                           {shopName}
                         </div>
-                        <div className="text-sm text-zinc-500">
-                          สินค้าที่กำลังลงขาย {products.length} รายการ
+                        <div className="flex flex-wrap gap-2 text-sm text-zinc-500">
+                          <span>กำลังขาย {availableProductsCount} รายการ</span>
+                          <span>ขายแล้ว {soldProductsCount} รายการ</span>
                         </div>
                       </div>
                     </div>
@@ -387,9 +415,24 @@ export class SellerStorefrontPage extends React.Component {
                     </button>
                   </div>
 
-                  <p className="rounded-2xl bg-zinc-50 p-4 text-sm text-zinc-700 whitespace-pre-line break-words">
+                  <p className="app-muted-block rounded-2xl p-4 text-sm text-zinc-700 whitespace-pre-line break-words">
                     {shopDescription || "ร้านนี้ยังไม่มีคำอธิบายร้าน"}
                   </p>
+
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div className="app-soft-panel rounded-2xl px-4 py-3">
+                      <div className="text-xs font-medium uppercase tracking-[0.12em] text-zinc-500">เบอร์โทร</div>
+                      <div className="mt-1 text-sm font-medium text-zinc-800 break-all">
+                        {shopPhone || "ยังไม่ได้ระบุ"}
+                      </div>
+                    </div>
+                    <div className="app-soft-panel rounded-2xl px-4 py-3">
+                      <div className="text-xs font-medium uppercase tracking-[0.12em] text-zinc-500">อีเมล</div>
+                      <div className="mt-1 text-sm font-medium text-zinc-800 break-all">
+                        {shopEmail || "ยังไม่ได้ระบุ"}
+                      </div>
+                    </div>
+                  </div>
                 </section>
 
                 <section className="space-y-4">
@@ -466,8 +509,8 @@ class StorefrontProductCard extends React.Component {
   render() {
     const { product, onOpenProduct } = this.props;
     return (
-      <article className="rounded-2xl border border-zinc-200 p-3 bg-white">
-        <div className="aspect-square rounded-xl bg-zinc-100 overflow-hidden grid place-items-center">
+      <article className="app-product-card rounded-2xl p-3">
+        <div className="app-product-media aspect-square rounded-xl grid place-items-center">
           {product?.imageUrl ? (
             <img src={product.imageUrl} alt={product?.name ?? "product"} className="h-full w-full object-cover" />
           ) : (
@@ -478,13 +521,13 @@ class StorefrontProductCard extends React.Component {
           <div className="font-semibold text-zinc-800 line-clamp-2 break-words">
             {product?.name || "ไม่ระบุชื่อสินค้า"}
           </div>
-          <div className="inline-flex w-fit rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-700">
+          <div className="app-chip inline-flex w-fit rounded-full px-2 py-0.5 text-xs">
             {ProductCategory.getLabel(product?.category)}
           </div>
-          <div className="text-sm font-medium text-zinc-700">{product?.getPriceLabel?.() ?? "฿0.00"}</div>
+          <div className="text-base font-semibold text-zinc-900">{product?.getPriceLabel?.() ?? "฿0.00"}</div>
           <button
             type="button"
-            className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+            className="app-soft-panel w-full rounded-xl px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
             onClick={() => onOpenProduct?.(product)}
           >
             ดูสินค้า

@@ -3,6 +3,7 @@ import { ProfilePopup } from "../components/HeaderActionPopups";
 import { OrderService } from "../services/OrderService";
 import { ShippingMethod } from "../models/ShippingMethod";
 import { RealtimeSyncManager } from "../utils/RealtimeSyncManager";
+import { NotificationBellButton } from "../components/NotificationBellButton";
 
 const getStatusBadgeClassName = (status) => {
   switch (`${status ?? ""}`.trim()) {
@@ -12,6 +13,10 @@ const getStatusBadgeClassName = (status) => {
     case "completed":
     case "awaiting_meetup":
       return "border-emerald-200 bg-emerald-50 text-emerald-700";
+    case "awaiting_buyer_confirmation":
+      return "border-sky-200 bg-sky-50 text-sky-700";
+    case "preparing_parcel":
+      return "border-indigo-200 bg-indigo-50 text-indigo-700";
     case "rejected":
     case "cancelled":
     case "cancelled_by_seller":
@@ -21,6 +26,8 @@ const getStatusBadgeClassName = (status) => {
     case "countered_by_seller":
     case "awaiting_parcel_pickup":
       return "border-sky-200 bg-sky-50 text-sky-700";
+    case "parcel_in_transit":
+      return "border-blue-200 bg-blue-50 text-blue-700";
     case "reported_to_admin":
       return "border-rose-200 bg-rose-50 text-rose-700";
     default:
@@ -156,16 +163,18 @@ export class MyOrdersPage extends React.Component {
   render() {
     const { user } = this.props;
     const { loading, error, done, orders, showProfilePopup, actionLoadingKey } = this.state;
+    const chatUnreadCount = Number(this.props.chatUnreadCount ?? 0) || 0;
+    const notificationUnreadCount = Number(this.props.notificationUnreadCount ?? 0) || 0;
 
     return (
       <div className="min-h-dvh bg-zinc-50">
-        <div className="sticky top-0 z-40 border-b border-zinc-200 bg-[#A4E3D8]">
+        <div className="app-topbar-shell sticky top-0 z-40 border-b border-zinc-200 bg-[#A4E3D8]">
           <div className="mx-auto flex max-w-350 items-center gap-4 px-4 py-5">
             <button
               type="button"
               onClick={this.props.onGoHome}
               title="กลับหน้าแรก"
-              className="shrink-0 rounded-xl border border-zinc-200 bg-white p-0"
+              className="app-logo-button shrink-0 rounded-[1.2rem] p-0"
             >
               <img
                 src="/App logo.jpg"
@@ -181,16 +190,23 @@ export class MyOrdersPage extends React.Component {
 
             <button
               type="button"
-              className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+              className="app-soft-panel rounded-xl px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
               onClick={this.loadOrders}
             >
               รีเฟรช
             </button>
 
+            <NotificationBellButton
+              unreadCount={notificationUnreadCount}
+              onClick={this.props.onGoNotifications}
+              className="app-icon-button relative grid h-10 w-10 place-items-center rounded-xl"
+            />
+
             <button
               type="button"
-              className="grid h-10 w-10 place-items-center rounded-xl border border-zinc-200 bg-[#F4D03E]"
+              className="app-icon-button relative grid h-10 w-10 place-items-center rounded-xl"
               onClick={() => this.props.onGoChat?.()}
+              data-chat-unread={chatUnreadCount > 0 ? (chatUnreadCount > 99 ? "99+" : `${chatUnreadCount}`) : ""}
               title="แชท"
             >
               <img src="/chat.svg" alt="แชท" className="h-5 w-5 object-contain" />
@@ -198,7 +214,7 @@ export class MyOrdersPage extends React.Component {
 
             <button
               type="button"
-              className="grid h-10 w-10 place-items-center rounded-xl bg-[#F4D03E] text-white"
+              className="app-icon-button grid h-10 w-10 place-items-center rounded-xl"
               onClick={this.openProfilePopup}
               title="บัญชี"
             >
@@ -208,7 +224,7 @@ export class MyOrdersPage extends React.Component {
         </div>
 
         <div className="mx-auto max-w-375 px-4 py-6">
-          <div className="space-y-4 rounded-2xl bg-white p-4 shadow md:p-6">
+          <div className="app-page-section app-main-panel space-y-4 rounded-2xl p-4 md:p-6">
             {loading ? <div className="text-sm text-zinc-500">กำลังโหลดคำสั่งซื้อจากฐานข้อมูล...</div> : null}
             {error ? (
               <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
@@ -260,7 +276,7 @@ class OrderCard extends React.Component {
     const { order, actionLoadingKey, onSubmitShopOrderDecision } = this.props;
 
     return (
-      <article className="space-y-4 rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
+      <article className="app-order-card space-y-4 rounded-2xl p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="space-y-1">
             <div className="text-base font-semibold text-zinc-900">คำสั่งซื้อ #{order?.id || "-"}</div>
@@ -365,23 +381,23 @@ class OrderShopSection extends React.Component {
             <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_14rem]">
               <div className="space-y-2">
                 <div className="rounded-xl border border-zinc-200 bg-white p-3">
-                  <div className="text-xs text-zinc-500">วิธีชำระ</div>
-                  <div className="text-sm text-zinc-700">
-                    {shopOrder?.parcelPayment?.getPaymentMethodLabel?.() ?? "ชำระเงินด้วย QR code"}
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-zinc-200 bg-white p-3">
-                  <div className="text-xs text-zinc-500">ผู้รับ</div>
-                  <div className="text-sm text-zinc-700">
-                    {shopOrder?.getRecipientLine?.() || "ยังไม่ได้ระบุชื่อหรือเบอร์โทร"}
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-zinc-200 bg-white p-3">
                   <div className="text-xs text-zinc-500">ที่อยู่จัดส่ง</div>
+                  {shopOrder?.buyerShippingAddress?.label ? (
+                    <div className="mt-1 text-sm font-medium text-zinc-800">{shopOrder.buyerShippingAddress.label}</div>
+                  ) : null}
+                  {shopOrder?.buyerShippingAddress?.name || shopOrder?.buyerShippingAddress?.phone ? (
+                    <div className="mt-1 text-sm text-zinc-600">
+                      {[shopOrder?.buyerShippingAddress?.name, shopOrder?.buyerShippingAddress?.phone]
+                        .filter(Boolean)
+                        .join(" | ")}
+                    </div>
+                  ) : null}
                   <div className="whitespace-pre-line break-words text-sm text-zinc-700">
+                    {/*
                     {shopOrder?.buyerShippingAddress?.address || "ยังไม่ได้ระบุที่อยู่จัดส่ง"}
+                    */}
+                    {shopOrder?.buyerShippingAddress?.address ||
+                      "\u0e22\u0e31\u0e07\u0e44\u0e21\u0e48\u0e44\u0e14\u0e49\u0e23\u0e30\u0e1a\u0e38\u0e17\u0e35\u0e48\u0e2d\u0e22\u0e39\u0e48\u0e08\u0e31\u0e14\u0e2a\u0e48\u0e07"}
                   </div>
                 </div>
               </div>
@@ -417,6 +433,11 @@ class OrderShopSection extends React.Component {
               </div>
             ) : null}
             <div className="text-xs text-zinc-500">สถานะ: {shopOrder?.getStatusLabel?.() ?? "รอดำเนินการ"}</div>
+            {shopOrder?.getEffectiveStatus?.() === "awaiting_buyer_confirmation" ? (
+              <div className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-700">
+                คนขายแจ้งว่าส่งมอบสินค้าแล้ว ถ้าคุณได้รับของเรียบร้อยสามารถกดรับของด้านล่างเพื่อปิดธุรกรรมได้
+              </div>
+            ) : null}
           </div>
         ) : null}
 

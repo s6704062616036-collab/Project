@@ -2,6 +2,7 @@ import { HttpClient } from "./HttpClient";
 import { AdminDashboardSummary } from "../models/AdminDashboardSummary";
 import { AdminMember } from "../models/AdminMember";
 import { AdminProductReport } from "../models/AdminProductReport";
+import { AdminManagedProduct } from "../models/AdminManagedProduct";
 import { AdminCategory } from "../models/AdminCategory";
 import { ProductCategory } from "../models/ProductCategory";
 
@@ -137,6 +138,27 @@ const mergeAdminMembers = (baseMembers = [], extraMembers = []) => {
   return [...mergedMap.values()];
 };
 
+const toSortableTime = (value) => {
+  const parsed = new Date(value ?? "").getTime();
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const sortAdminMembers = (members = []) =>
+  [...members].sort((left, right) => {
+    const leftPending = left?.kycStatus === "pending" ? 1 : 0;
+    const rightPending = right?.kycStatus === "pending" ? 1 : 0;
+    if (rightPending !== leftPending) {
+      return rightPending - leftPending;
+    }
+
+    const submittedDiff = toSortableTime(right?.kycSubmittedAt) - toSortableTime(left?.kycSubmittedAt);
+    if (submittedDiff !== 0) {
+      return submittedDiff;
+    }
+
+    return toSortableTime(right?.createdAt) - toSortableTime(left?.createdAt);
+  });
+
 export class AdminService {
   static #instance = null;
 
@@ -188,7 +210,7 @@ export class AdminService {
       }
     }
 
-    return { members: mergedMembers };
+    return { members: sortAdminMembers(mergedMembers) };
   }
 
   async reviewMember(memberId, payload = {}) {
@@ -254,6 +276,40 @@ export class AdminService {
           ["result", "deletedReportId"],
         ]) ?? "",
       message: extractMessage(result, "อัปเดตรายงานแล้ว"),
+    };
+  }
+
+  async listProducts(search = "") {
+    const query = `${search ?? ""}`.trim();
+    const path = query
+      ? `/api/admin/products?q=${encodeURIComponent(query)}`
+      : "/api/admin/products";
+    const result = await this.http.get(path);
+
+    return {
+      products: ensureArray(result?.products).map((item) => AdminManagedProduct.fromJSON(item)),
+      totalCount: Number(result?.totalCount) || 0,
+    };
+  }
+
+  async deleteProduct(productId, payload = {}) {
+    const normalizedId = `${productId ?? ""}`.trim();
+    if (!normalizedId) throw new Error("à¹„à¸¡à¹ˆà¸žà¸šà¸£à¸«à¸±à¸ªà¸ªà¸´à¸™à¸„à¹‰à¸²");
+
+    const result = await this.http.request(
+      `/api/admin/products/${encodeURIComponent(normalizedId)}`,
+      { method: "DELETE", body: payload },
+    );
+
+    return {
+      deletedProductId:
+        pickFirstDefined(result, [
+          ["deletedProductId"],
+          ["data", "deletedProductId"],
+          ["result", "deletedProductId"],
+        ]) ?? normalizedId,
+      product: result?.product ? AdminManagedProduct.fromJSON(result.product) : null,
+      message: extractMessage(result, "à¸¥à¸šà¸ªà¸´à¸™à¸„à¹‰à¸²à¹à¸¥à¹‰à¸§"),
     };
   }
 

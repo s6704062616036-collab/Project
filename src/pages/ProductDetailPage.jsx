@@ -7,6 +7,7 @@ import { ChatService } from "../services/ChatService";
 import { ContentReportService } from "../services/ContentReportService";
 import { ContentReportModal } from "../components/ContentReportModal";
 import { CartPopup, ProfilePopup } from "../components/HeaderActionPopups";
+import { NotificationBellButton } from "../components/NotificationBellButton";
 
 export class ProductDetailPage extends React.Component {
   state = {
@@ -28,6 +29,7 @@ export class ProductDetailPage extends React.Component {
     cartItems: [],
     checkingOut: false,
     showReportModal: false,
+    showImageViewer: false,
     reportReason: "",
     reportSubmitting: false,
     reportError: "",
@@ -47,6 +49,7 @@ export class ProductDetailPage extends React.Component {
 
   componentDidMount() {
     this.syncProductFromDatabase();
+    this.loadCartItems();
   }
 
   componentDidUpdate(prevProps) {
@@ -116,6 +119,35 @@ export class ProductDetailPage extends React.Component {
     });
   };
 
+  openImageViewer = (index = this.state.activeImageIndex) => {
+    const imageUrls = this.getResolvedProduct()?.getImageUrls?.() ?? [];
+    if (!imageUrls.length) return;
+
+    const safeIndex = Math.max(0, Math.min(index, imageUrls.length - 1));
+    this.setState({ showImageViewer: true, activeImageIndex: safeIndex });
+  };
+
+  closeImageViewer = () => {
+    this.setState({ showImageViewer: false });
+  };
+
+  showPreviousGalleryImage = () => {
+    const imageUrls = this.getResolvedProduct()?.getImageUrls?.() ?? [];
+    if (imageUrls.length <= 1) return;
+
+    const nextIndex =
+      (Math.max(0, this.state.activeImageIndex) - 1 + imageUrls.length) % imageUrls.length;
+    this.selectGalleryImage(nextIndex);
+  };
+
+  showNextGalleryImage = () => {
+    const imageUrls = this.getResolvedProduct()?.getImageUrls?.() ?? [];
+    if (imageUrls.length <= 1) return;
+
+    const nextIndex = (Math.max(0, this.state.activeImageIndex) + 1) % imageUrls.length;
+    this.selectGalleryImage(nextIndex);
+  };
+
   onGalleryScroll = (e) => {
     const viewport = e.currentTarget;
     if (!viewport?.clientWidth) return;
@@ -159,6 +191,18 @@ export class ProductDetailPage extends React.Component {
     }
 
     viewport.scrollLeft = this.galleryPointerState.startScrollLeft - deltaX;
+  };
+
+  onGalleryImageClick = (index) => {
+    if (this.galleryPointerState.didDrag) return;
+    this.openImageViewer(index);
+  };
+
+  onGalleryViewportClick = () => {
+    const imageUrls = this.getResolvedProduct()?.getImageUrls?.() ?? [];
+    if (!imageUrls.length) return;
+    if (this.galleryPointerState.didDrag) return;
+    this.openImageViewer(this.state.activeImageIndex);
   };
 
   finishGalleryPointerDrag = (e) => {
@@ -449,7 +493,10 @@ export class ProductDetailPage extends React.Component {
     this.setState({ checkingOut: true, cartError: "", cartDone: "" });
     try {
       const result = await this.cartService.checkout(checkoutPayload);
-      await this.loadCartItems();
+      await Promise.all([
+        this.loadCartItems(),
+        this.syncProductFromDatabase(),
+      ]);
       this.setState({
         cartDone: result?.message ?? "สั่งซื้อเรียบร้อย",
       });
@@ -492,6 +539,7 @@ export class ProductDetailPage extends React.Component {
       activeImageIndex,
       isDraggingGallery,
       showReportModal,
+      showImageViewer,
       reportReason,
       reportSubmitting,
       reportError,
@@ -504,6 +552,12 @@ export class ProductDetailPage extends React.Component {
     const exchangeItem = `${product?.exchangeItem ?? ""}`.trim();
     const hasProductData = Boolean(product?.id || product?.name);
     const cartTotalLabel = this.getCartTotalLabel();
+    const cartBadgeCount = (cartItems ?? []).reduce(
+      (sum, item) => sum + (Number(item?.quantity) || 0),
+      0,
+    );
+    const chatUnreadCount = Number(this.props.chatUnreadCount ?? 0) || 0;
+    const notificationUnreadCount = Number(this.props.notificationUnreadCount ?? 0) || 0;
     const isSold = product?.isSold?.() ?? false;
     const isOwnProduct =
       `${this.props.user?.id ?? ""}`.trim() &&
@@ -512,16 +566,15 @@ export class ProductDetailPage extends React.Component {
     const sellerName = product?.getShopDisplayName?.() ?? "ร้านค้าผู้ขาย";
     const sellerAvatarUrl = `${product?.shopAvatarUrl ?? ""}`.trim();
     const canOpenSellerProfile = Boolean(`${product?.ownerId ?? ""}`.trim());
-
     return (
       <div className="min-h-dvh bg-zinc-50">
-        <div className="sticky top-0 z-40 bg-[#A4E3D8] border-b border-zinc-200">
+        <div className="app-topbar-shell sticky top-0 z-40 bg-[#A4E3D8] border-b border-zinc-200">
           <div className="mx-auto max-w-350 px-4 py-5 flex items-center gap-8">
             <button
               type="button"
               onClick={this.props.onGoHome}
               title="กลับหน้าแรก"
-              className="shrink-0 rounded-xl border border-zinc-200 bg-white p-0"
+              className="app-logo-button shrink-0 rounded-[1.2rem] p-0"
             >
               <img
                 src="/App logo.jpg"
@@ -531,7 +584,7 @@ export class ProductDetailPage extends React.Component {
             </button>
             <form className="flex-1" onSubmit={this.onSearchSubmit}>
               <input
-                className="w-full rounded-xl border bg-white border-zinc-200 px-3 py-2 text-sm outline-none"
+                className="app-search-field"
                 placeholder="ค้นหาสินค้า..."
                 value={searchKeyword}
                 onChange={(e) => this.onSearchChange(e.target.value)}
@@ -539,23 +592,35 @@ export class ProductDetailPage extends React.Component {
             </form>
 
             <button
-              className="h-10 w-10 rounded-xl bg-[#F4D03E] border border-zinc-200 grid place-items-center"
+              className="app-icon-button relative grid h-10 w-10 place-items-center rounded-xl"
               onClick={this.openCartPopup}
               title="ตะกร้า"
             >
               <img src="/cart.svg" alt="ตะกร้า" className="h-5 w-5 object-contain" />
+              {cartBadgeCount > 0 ? (
+                <span className="absolute -right-1.5 -top-1.5 min-w-[1.25rem] rounded-full bg-zinc-900 px-1 py-0.5 text-[10px] font-bold leading-none text-white">
+                  {cartBadgeCount > 99 ? "99+" : cartBadgeCount}
+                </span>
+              ) : null}
             </button>
 
+            <NotificationBellButton
+              unreadCount={notificationUnreadCount}
+              onClick={this.props.onGoNotifications}
+              className="app-icon-button relative grid h-10 w-10 place-items-center rounded-xl"
+            />
+
             <button
-              className="h-10 w-10 rounded-xl bg-[#F4D03E] border border-zinc-200 grid place-items-center"
+              className="app-icon-button relative grid h-10 w-10 place-items-center rounded-xl"
               onClick={() => this.props.onGoChat?.()}
+              data-chat-unread={chatUnreadCount > 0 ? (chatUnreadCount > 99 ? "99+" : `${chatUnreadCount}`) : ""}
               title="แชท"
             >
               <img src="/chat.svg" alt="แชท" className="h-5 w-5 object-contain" />
             </button>
 
             <button
-              className="h-10 w-10 rounded-xl bg-[#F4D03E] text-white grid place-items-center"
+              className="app-icon-button grid h-10 w-10 place-items-center rounded-xl"
               onClick={this.openProfilePopup}
               title="บัญชี"
             >
@@ -565,7 +630,7 @@ export class ProductDetailPage extends React.Component {
         </div>
 
         <div className="mx-auto max-w-375 px-4 py-6">
-          <div className="rounded-2xl bg-white shadow p-4 md:p-6 space-y-4">
+          <div className="app-page-section app-main-panel rounded-2xl p-4 md:p-6 space-y-4">
             {loadingProduct ? <div className="text-sm text-zinc-500">กำลังโหลดข้อมูลสินค้าจากฐานข้อมูล...</div> : null}
             {productError ? (
               <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
@@ -597,13 +662,16 @@ export class ProductDetailPage extends React.Component {
                         ? isDraggingGallery
                           ? "cursor-grabbing"
                           : "cursor-grab"
-                        : ""
+                        : imageUrls.length
+                          ? "cursor-zoom-in"
+                          : ""
                     }`}
                     onScroll={hasMultipleImages ? this.onGalleryScroll : undefined}
                     onPointerDown={hasMultipleImages ? this.onGalleryPointerDown : undefined}
                     onPointerMove={hasMultipleImages ? this.onGalleryPointerMove : undefined}
                     onPointerUp={hasMultipleImages ? this.finishGalleryPointerDrag : undefined}
                     onPointerCancel={hasMultipleImages ? this.finishGalleryPointerDrag : undefined}
+                    onClick={this.onGalleryViewportClick}
                     style={{ touchAction: hasMultipleImages ? "pan-y" : "auto" }}
                   >
                     {imageUrls.length ? (
@@ -611,6 +679,14 @@ export class ProductDetailPage extends React.Component {
                         <div
                           key={`${product.id || product.name}-image-${index}`}
                           className="grid h-full w-full shrink-0 snap-center place-items-center overflow-hidden"
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              this.onGalleryImageClick(index);
+                            }
+                          }}
                         >
                           <img
                             src={url}
@@ -629,8 +705,26 @@ export class ProductDetailPage extends React.Component {
                   {hasMultipleImages ? (
                     <div className="flex items-center justify-between gap-2 text-xs text-zinc-500">
                       <div>ลากเพื่อเลื่อนดูรูปสินค้า</div>
-                      <div>
-                        {safeActiveImageIndex + 1}/{imageUrls.length}
+                      <div className="ml-auto flex items-center gap-2">
+                        <button
+                          type="button"
+                          className="grid h-8 w-8 place-items-center rounded-full border border-zinc-200 bg-white text-base font-semibold text-zinc-700 hover:bg-zinc-50"
+                          onClick={this.showPreviousGalleryImage}
+                          aria-label="ดูรูปก่อนหน้า"
+                        >
+                          ‹
+                        </button>
+                        <button
+                          type="button"
+                          className="grid h-8 w-8 place-items-center rounded-full border border-zinc-200 bg-white text-base font-semibold text-zinc-700 hover:bg-zinc-50"
+                          onClick={this.showNextGalleryImage}
+                          aria-label="ดูรูปถัดไป"
+                        >
+                          ›
+                        </button>
+                        <div>
+                          {safeActiveImageIndex + 1}/{imageUrls.length}
+                        </div>
                       </div>
                     </div>
                   ) : null}
@@ -668,7 +762,7 @@ export class ProductDetailPage extends React.Component {
                     </div>
                     <button
                       type="button"
-                      className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-zinc-200 bg-white hover:bg-zinc-50"
+                      className="app-soft-panel grid h-10 w-10 shrink-0 place-items-center rounded-xl hover:bg-zinc-50"
                       onClick={this.openReportModal}
                       title="รายงานสินค้า"
                     >
@@ -682,10 +776,10 @@ export class ProductDetailPage extends React.Component {
                   >
                     {product?.getSaleStatusLabel?.() ?? "พร้อมขาย"}
                   </div>
-                  <div className="text-xl font-semibold text-zinc-800">{product?.getPriceLabel?.() ?? "฿0.00"}</div>
+                  <div className="text-2xl font-semibold text-zinc-900">{product?.getPriceLabel?.() ?? "฿0.00"}</div>
                   <button
                     type="button"
-                    className="flex w-full max-w-md items-center gap-3 rounded-2xl border border-zinc-200 bg-zinc-50 p-3 text-left transition hover:border-zinc-300 hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+                    className="app-seller-card flex w-full max-w-md items-center gap-3 rounded-2xl p-3 text-left transition hover:border-zinc-300 hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
                     onClick={this.onOpenSellerProfile}
                     disabled={!canOpenSellerProfile}
                   >
@@ -723,7 +817,7 @@ export class ProductDetailPage extends React.Component {
                   <div className="grid max-w-md grid-cols-2 gap-2">
                     <button
                       type="button"
-                      className="rounded-xl border border-zinc-200 px-3 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50 disabled:opacity-60"
+                      className="app-soft-panel rounded-xl px-3 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50 disabled:opacity-60"
                       onClick={this.onChatSeller}
                       disabled={openingChat}
                     >
@@ -745,17 +839,16 @@ export class ProductDetailPage extends React.Component {
                     </button>
                   </div>
 
-                  <div className="inline-flex rounded-full bg-zinc-100 px-2.5 py-1 text-xs text-zinc-700">
+                  <div className="app-chip inline-flex rounded-full px-2.5 py-1 text-xs">
                     {ProductCategory.getLabel(product?.category)}
                   </div>
-                  <p className="rounded-xl bg-zinc-50 p-3 text-sm text-zinc-700 whitespace-pre-line break-words">
+                  <p className="app-muted-block rounded-xl p-3 text-sm text-zinc-700 whitespace-pre-line break-words">
                     {product?.description || "ยังไม่มีคำอธิบายสินค้า"}
                   </p>
                 </div>
               </div>
             )}
           </div>
-        </div>
 
         {showCartPopup ? (
           <CartPopup
@@ -795,6 +888,102 @@ export class ProductDetailPage extends React.Component {
             onSubmit={this.submitProductReport}
           />
         ) : null}
+        {showImageViewer && imageUrls.length ? (
+          <div
+            className="fixed inset-0 z-[80] bg-black/80 px-4 py-6"
+            onClick={this.closeImageViewer}
+          >
+            <div className="mx-auto flex h-full max-w-6xl flex-col">
+              <div className="mb-4 flex items-center justify-between gap-3 text-white">
+                <div className="min-w-0">
+                  <div className="truncate text-base font-semibold">
+                    {product?.name || "Product image"}
+                  </div>
+                  <div className="text-sm text-white/75">
+                    {safeActiveImageIndex + 1}/{imageUrls.length}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-white/20 bg-white/10 text-xl text-white hover:bg-white/20"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    this.closeImageViewer();
+                  }}
+                  aria-label="Close image viewer"
+                >
+                  ×
+                </button>
+              </div>
+
+              <div
+                className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-3xl border border-white/10 bg-black/30"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div
+                  className="mx-auto aspect-square w-full overflow-hidden rounded-2xl bg-white/95 p-4"
+                  style={{ maxWidth: "min(78vw, 78vh)" }}
+                >
+                  <img
+                    src={imageUrls[safeActiveImageIndex]}
+                    alt={`${product?.name ?? "product-image"}-full-${safeActiveImageIndex + 1}`}
+                    className="h-full w-full object-contain"
+                  />
+                </div>
+
+                {hasMultipleImages ? (
+                  <div className="absolute bottom-4 right-4 flex items-center gap-2">
+                    <button
+                      type="button"
+                      className="grid h-12 w-12 place-items-center rounded-full border border-white/15 bg-black/45 text-2xl font-semibold text-white hover:bg-black/60"
+                      onClick={this.showPreviousGalleryImage}
+                      aria-label="Previous image"
+                    >
+                      ‹
+                    </button>
+                    <button
+                      type="button"
+                      className="grid h-12 w-12 place-items-center rounded-full border border-white/15 bg-black/45 text-2xl font-semibold text-white hover:bg-black/60"
+                      onClick={this.showNextGalleryImage}
+                      aria-label="Next image"
+                    >
+                      ›
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+
+              {hasMultipleImages ? (
+                <div
+                  className="mt-4 flex gap-2 overflow-x-auto pb-1"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {imageUrls.map((url, index) => (
+                    <button
+                      type="button"
+                      key={`${product.id || product.name}-viewer-preview-${index}`}
+                      className={`h-20 w-20 shrink-0 overflow-hidden rounded-xl border-2 transition ${
+                        index === safeActiveImageIndex
+                          ? "border-white"
+                          : "border-transparent opacity-70 hover:opacity-100"
+                      }`}
+                      onClick={() => this.selectGalleryImage(index)}
+                      aria-label={`View image ${index + 1}`}
+                    >
+                      <img
+                        src={url}
+                        alt={`${product?.name ?? "product-image"}-preview-${index + 1}`}
+                        className="h-full w-full object-cover"
+                        draggable={false}
+                      />
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+      </div>
       </div>
     );
   }

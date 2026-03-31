@@ -17,6 +17,7 @@ export class ChatMessage {
     orderId,
     text,
     imageUrl,
+    videoUrl,
     meetupProposal,
     createdAt,
   } = {}) {
@@ -29,6 +30,7 @@ export class ChatMessage {
     this.orderId = orderId ?? "";
     this.text = text ?? "";
     this.imageUrl = imageUrl ?? "";
+    this.videoUrl = videoUrl ?? "";
     this.meetupProposal = meetupProposal
       ? {
           location: safeText(meetupProposal.location),
@@ -54,6 +56,7 @@ export class ChatMessage {
       orderId: json?.orderId ?? "",
       text: json?.text ?? json?.message ?? "",
       imageUrl: json?.imageUrl ?? "",
+      videoUrl: json?.videoUrl ?? "",
       meetupProposal: json?.meetupProposal ?? null,
       createdAt: json?.createdAt,
     });
@@ -71,6 +74,10 @@ export class ChatMessage {
     return Boolean(safeText(this.imageUrl));
   }
 
+  hasVideo() {
+    return Boolean(safeText(this.videoUrl));
+  }
+
   isMeetupProposal() {
     return safeText(this.type) === "meetup_proposal" && Boolean(this.meetupProposal);
   }
@@ -80,6 +87,7 @@ export class ChatMessage {
       return `ข้อเสนอนัดรับ: ${this.getMeetupProposalLocation()}`;
     }
     if (this.hasText()) return safeText(this.text);
+    if (this.hasVideo()) return "ส่งวิดีโอ";
     if (this.hasImage()) return "ส่งรูปภาพ";
     return "ข้อความ";
   }
@@ -100,6 +108,8 @@ export class ChatMessage {
         return "รอคนขายตอบกลับ";
       case "awaiting_meetup":
         return "รอนัดพบ";
+      case "awaiting_buyer_confirmation":
+        return "รอผู้ซื้อยืนยันรับของ";
       case "countered_by_seller":
         return "คนขายเสนอเปลี่ยนสถานที่";
       case "cancelled_by_seller":

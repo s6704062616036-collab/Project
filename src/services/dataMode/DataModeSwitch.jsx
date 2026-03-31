@@ -1,4 +1,5 @@
 const DATA_MODE_STORAGE_KEY = "myweb:data-mode";
+const FORCE_DATA_MODE = `${import.meta.env.VITE_FORCE_DATA_MODE ?? ""}`.trim().toLowerCase() === "true";
 
 export class DataModeSwitch {
   static DATABASE_MODE = "database";
@@ -32,6 +33,7 @@ export class DataModeSwitch {
   }
 
   static getMode() {
+    if (FORCE_DATA_MODE) return DataModeSwitch.getDefaultMode();
     if (typeof window === "undefined") return DataModeSwitch.getDefaultMode();
     const persisted = window.localStorage.getItem(DATA_MODE_STORAGE_KEY);
     return DataModeSwitch.normalize(persisted ?? DataModeSwitch.getDefaultMode());
@@ -51,6 +53,10 @@ export class DataModeSwitch {
 
   static setMode(mode) {
     const nextMode = DataModeSwitch.normalize(mode);
+
+    if (FORCE_DATA_MODE) {
+      return DataModeSwitch.getDefaultMode();
+    }
 
     if (typeof window !== "undefined") {
       window.localStorage.setItem(DATA_MODE_STORAGE_KEY, nextMode);

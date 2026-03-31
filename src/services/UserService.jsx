@@ -31,6 +31,10 @@ export class UserService {
     const formData = new FormData();
 
     Object.entries(editablePayload ?? {}).forEach(([k, v]) => {
+      if (k === "addresses") {
+        formData.append(k, JSON.stringify(Array.isArray(v) ? v : []));
+        return;
+      }
       formData.append(k, v ?? "");
     });
     if (avatarFile) formData.append("avatar", avatarFile);

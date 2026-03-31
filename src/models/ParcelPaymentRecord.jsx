@@ -123,6 +123,27 @@ const QR_CODE_PATHS = [
   ["paymentVerification", "qrCodeUrl"],
 ];
 
+const BANK_NAME_PATHS = [
+  ["bankName"],
+  ["payment", "bankName"],
+  ["parcelPayment", "bankName"],
+  ["paymentVerification", "bankName"],
+];
+
+const BANK_ACCOUNT_NAME_PATHS = [
+  ["bankAccountName"],
+  ["payment", "bankAccountName"],
+  ["parcelPayment", "bankAccountName"],
+  ["paymentVerification", "bankAccountName"],
+];
+
+const BANK_ACCOUNT_NUMBER_PATHS = [
+  ["bankAccountNumber"],
+  ["payment", "bankAccountNumber"],
+  ["parcelPayment", "bankAccountNumber"],
+  ["paymentVerification", "bankAccountNumber"],
+];
+
 const PAYMENT_METHOD_PATHS = [
   ["paymentMethod"],
   ["parcelPaymentMethod"],
@@ -186,6 +207,9 @@ const SHIPPING_METHOD_PATHS = [
 export class ParcelPaymentRecord {
   constructor({
     qrCodeUrl,
+    bankName,
+    bankAccountName,
+    bankAccountNumber,
     receiptImageUrl,
     status,
     submittedAt,
@@ -194,6 +218,9 @@ export class ParcelPaymentRecord {
     paymentMethod,
   } = {}) {
     this.qrCodeUrl = safeText(qrCodeUrl);
+    this.bankName = safeText(bankName);
+    this.bankAccountName = safeText(bankAccountName);
+    this.bankAccountNumber = safeText(bankAccountNumber);
     this.receiptImageUrl = safeText(receiptImageUrl);
     this.status = safeText(status);
     this.submittedAt = safeText(submittedAt);
@@ -220,6 +247,14 @@ export class ParcelPaymentRecord {
       ].includes(normalized)
     ) {
       return "awaiting_parcel_pickup";
+    }
+
+    if (["preparing_parcel", "preparing_shipment", "packing"].includes(normalized)) {
+      return "preparing_parcel";
+    }
+
+    if (["parcel_in_transit", "in_transit", "shipped", "shipping"].includes(normalized)) {
+      return "parcel_in_transit";
     }
 
     if (
@@ -277,6 +312,8 @@ export class ParcelPaymentRecord {
     if (normalizedStatuses.includes("rejected_by_buyer")) return "rejected_by_buyer";
     if (normalizedStatuses.includes("cancelled")) return "cancelled";
     if (normalizedStatuses.includes("completed")) return "completed";
+    if (normalizedStatuses.includes("parcel_in_transit")) return "parcel_in_transit";
+    if (normalizedStatuses.includes("preparing_parcel")) return "preparing_parcel";
     if (normalizedStatuses.includes("awaiting_parcel_pickup")) return "awaiting_parcel_pickup";
     if (normalizedStatuses.includes("pending_payment_verification")) return "pending_payment_verification";
     return normalizedStatuses[0];
@@ -304,6 +341,9 @@ export class ParcelPaymentRecord {
 
     const record = new ParcelPaymentRecord({
       qrCodeUrl: pickFirstDefined(source, QR_CODE_PATHS),
+      bankName: pickFirstDefined(source, BANK_NAME_PATHS),
+      bankAccountName: pickFirstDefined(source, BANK_ACCOUNT_NAME_PATHS),
+      bankAccountNumber: pickFirstDefined(source, BANK_ACCOUNT_NUMBER_PATHS),
       receiptImageUrl: pickFirstDefined(source, RECEIPT_IMAGE_PATHS),
       paymentMethod: pickFirstDefined(source, PAYMENT_METHOD_PATHS),
       status: ParcelPaymentRecord.resolveWorkflowStatus(
@@ -331,6 +371,10 @@ export class ParcelPaymentRecord {
     return ParcelPaymentMethod.isCashOnDelivery(this.getPaymentMethod());
   }
 
+  isBankTransfer() {
+    return ParcelPaymentMethod.isBankTransfer(this.getPaymentMethod());
+  }
+
   requiresReceipt() {
     return ParcelPaymentMethod.requiresReceipt(this.getPaymentMethod());
   }
@@ -350,6 +394,9 @@ export class ParcelPaymentRecord {
   hasAnyData() {
     return Boolean(
       this.qrCodeUrl ||
+        this.bankName ||
+        this.bankAccountName ||
+        this.bankAccountNumber ||
         this.receiptImageUrl ||
         this.paymentMethod ||
         this.status ||

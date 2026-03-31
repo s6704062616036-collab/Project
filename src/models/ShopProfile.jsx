@@ -1,11 +1,21 @@
 const safeText = (value) => `${value ?? ""}`.trim();
 const toDigits = (value) => `${value ?? ""}`.replace(/\D+/g, "");
+const apiBaseUrl = `${import.meta.env.VITE_API_URL ?? ""}`.trim().replace(/\/+$/, "");
+
+const toAbsoluteApiUrl = (value) => {
+  const normalizedValue = safeText(value);
+  if (!normalizedValue) return "";
+  if (/^(?:https?:)?\/\//i.test(normalizedValue)) return normalizedValue;
+  if (normalizedValue.startsWith("blob:") || normalizedValue.startsWith("data:")) return normalizedValue;
+  if (normalizedValue.startsWith("/")) return apiBaseUrl ? `${apiBaseUrl}${normalizedValue}` : normalizedValue;
+  return normalizedValue;
+};
 
 const normalizeImageUrl = (value) => {
-  if (typeof value === "string") return safeText(value);
+  if (typeof value === "string") return toAbsoluteApiUrl(value);
   if (!value || typeof value !== "object") return "";
 
-  return safeText(
+  return toAbsoluteApiUrl(
     value.url ??
       value.imageUrl ??
       value.secure_url ??
@@ -25,6 +35,12 @@ const normalizeKycStatus = (value) => {
   }
 };
 
+const normalizeBirthDate = (value) => {
+  const normalizedValue = safeText(value);
+  if (!normalizedValue) return "";
+  return /^\d{4}-\d{2}-\d{2}$/.test(normalizedValue) ? normalizedValue : "";
+};
+
 const normalizePendingSubmission = (input = {}) => {
   if (!input || typeof input !== "object") return null;
 
@@ -32,6 +48,7 @@ const normalizePendingSubmission = (input = {}) => {
     shopName: safeText(input.shopName),
     description: safeText(input.description),
     citizenId: toDigits(input.citizenId).slice(0, 13),
+    birthDate: normalizeBirthDate(input.birthDate),
     parcelQrCodeUrl: normalizeImageUrl(
       input.parcelQrCodeUrl ??
         input.paymentQrCodeUrl ??
@@ -50,9 +67,17 @@ export class ShopProfile {
     ownerId,
     shopName,
     description,
+    email,
+    phone,
     citizenId,
+    birthDate,
     avatarUrl,
     parcelQrCodeUrl,
+    bankName,
+    bankAccountName,
+    bankAccountNumber,
+    availableProductsCount,
+    soldProductsCount,
     kycStatus,
     kycSubmittedAt,
     kycReviewedAt,
@@ -64,9 +89,17 @@ export class ShopProfile {
     this.ownerId = ownerId ?? "";
     this.shopName = shopName ?? "";
     this.description = description ?? "";
+    this.email = email ?? "";
+    this.phone = phone ?? "";
     this.citizenId = ShopProfile.normalizeCitizenId(citizenId);
-    this.avatarUrl = avatarUrl ?? "";
-    this.parcelQrCodeUrl = parcelQrCodeUrl ?? "";
+    this.birthDate = normalizeBirthDate(birthDate);
+    this.avatarUrl = normalizeImageUrl(avatarUrl);
+    this.parcelQrCodeUrl = normalizeImageUrl(parcelQrCodeUrl);
+    this.bankName = `${bankName ?? ""}`;
+    this.bankAccountName = `${bankAccountName ?? ""}`;
+    this.bankAccountNumber = toDigits(bankAccountNumber).slice(0, 20);
+    this.availableProductsCount = Number.isFinite(Number(availableProductsCount)) ? Number(availableProductsCount) : 0;
+    this.soldProductsCount = Number.isFinite(Number(soldProductsCount)) ? Number(soldProductsCount) : 0;
     this.kycStatus = normalizeKycStatus(kycStatus);
     this.kycSubmittedAt = kycSubmittedAt ?? "";
     this.kycReviewedAt = kycReviewedAt ?? "";
@@ -85,10 +118,18 @@ export class ShopProfile {
       ownerId: json?.ownerId ?? json?.sellerId ?? json?.userId,
       shopName: json?.shopName ?? json?.name,
       description: json?.description ?? json?.bio,
+      email: json?.email,
+      phone: json?.phone,
       citizenId: json?.citizenId,
+      birthDate: json?.birthDate,
       avatarUrl: json?.avatarUrl,
       parcelQrCodeUrl:
         json?.parcelQrCodeUrl ?? json?.paymentQrCodeUrl ?? json?.parcelPaymentQrCodeUrl ?? json?.qrCodeUrl,
+      bankName: json?.bankName,
+      bankAccountName: json?.bankAccountName,
+      bankAccountNumber: json?.bankAccountNumber,
+      availableProductsCount: json?.availableProductsCount,
+      soldProductsCount: json?.soldProductsCount,
       kycStatus: json?.kycStatus,
       kycSubmittedAt: json?.kycSubmittedAt,
       kycReviewedAt: json?.kycReviewedAt ?? json?.reviewedAt,
@@ -112,6 +153,10 @@ export class ShopProfile {
         patch && Object.prototype.hasOwnProperty.call(patch, "citizenId")
           ? patch.citizenId
           : this.citizenId,
+      birthDate:
+        patch && Object.prototype.hasOwnProperty.call(patch, "birthDate")
+          ? patch.birthDate
+          : this.birthDate,
       pendingSubmission:
         patch && Object.prototype.hasOwnProperty.call(patch, "pendingSubmission")
           ? normalizePendingSubmission(patch.pendingSubmission)
@@ -185,7 +230,11 @@ export class ShopProfile {
       shopName: this.pendingSubmission.shopName ?? "",
       description: this.pendingSubmission.description ?? "",
       citizenId: this.pendingSubmission.citizenId ?? "",
+      birthDate: this.pendingSubmission.birthDate ?? this.birthDate ?? "",
       parcelQrCodeUrl: this.pendingSubmission.parcelQrCodeUrl ?? "",
+      bankName: safeText(this.bankName),
+      bankAccountName: safeText(this.bankAccountName),
+      bankAccountNumber: this.bankAccountNumber,
       pendingSubmission: this.pendingSubmission,
     });
   }
@@ -210,8 +259,12 @@ export class ShopProfile {
       shopName: this.shopName,
       description: this.description,
       citizenId: this.citizenId,
+      birthDate: this.birthDate,
       avatarUrl: this.avatarUrl,
       parcelQrCodeUrl: this.parcelQrCodeUrl,
+      bankName: this.bankName,
+      bankAccountName: this.bankAccountName,
+      bankAccountNumber: this.bankAccountNumber,
     };
   }
 }

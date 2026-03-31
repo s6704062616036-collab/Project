@@ -2,20 +2,38 @@ import { DataModeSwitch } from "./DataModeSwitch";
 import { MockApiRouter } from "./MockApiRouter";
 
 // DATA_MODE_SWITCH: remove this file + HttpClient integration to disable no-db mode entirely.
+const AUTH_TOKEN_STORAGE_KEY = "myweb_auth_token";
+
 class ApiHttpTransport {
   constructor({ baseUrl = "" } = {}) {
     this.baseUrl = baseUrl;
     this.jsonHeaders = { "Content-Type": "application/json" };
   }
 
+  getAuthHeaders(headers = {}) {
+    if (typeof window === "undefined") {
+      return { ...(headers ?? {}) };
+    }
+
+    const token = window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+    if (!token) {
+      return { ...(headers ?? {}) };
+    }
+
+    return {
+      Authorization: `Bearer ${token}`,
+      ...(headers ?? {}),
+    };
+  }
+
   async request(path, { method = "GET", body, headers } = {}) {
     const isFormData =
       typeof FormData !== "undefined" && body instanceof FormData;
+    const authHeaders = this.getAuthHeaders(headers);
 
-    // ถ้าเป็น FormData: ห้าม set Content-Type เอง
     const finalHeaders = isFormData
-      ? { ...(headers ?? {}) }
-      : { ...this.jsonHeaders, ...(headers ?? {}) };
+      ? authHeaders
+      : { ...this.jsonHeaders, ...authHeaders };
 
     const finalBody = isFormData
       ? body
@@ -27,7 +45,6 @@ class ApiHttpTransport {
       method,
       headers: finalHeaders,
       body: finalBody,
-      credentials: "include",
     });
 
     const contentType = res.headers.get("content-type") ?? "";

@@ -78,6 +78,8 @@ export class SellerParcelPaymentReview {
     submittedAt,
     receiptImageUrl,
     paymentMethod,
+    notes,
+    parcelShipment,
     buyerShippingAddress,
     adminReport,
   } = {}) {
@@ -99,14 +101,28 @@ export class SellerParcelPaymentReview {
       subtotal,
       this.items.reduce((sum, item) => sum + item.getLineTotalNumber(), 0),
     );
+    this.notes = safeText(notes);
     this.createdAt = safeText(createdAt);
     this.submittedAt = safeText(submittedAt) || this.createdAt;
     this.receiptImageUrl = safeText(receiptImageUrl);
     this.paymentMethod = safeText(paymentMethod)
       ? ParcelPaymentMethod.normalize(paymentMethod)
       : "";
+    this.parcelShipment = parcelShipment
+      ? {
+          trackingNumber: safeText(parcelShipment.trackingNumber),
+          carrier: safeText(parcelShipment.carrier),
+          status: safeText(parcelShipment.status),
+          note: safeText(parcelShipment.note),
+          preparedAt: safeText(parcelShipment.preparedAt),
+          shippedAt: safeText(parcelShipment.shippedAt),
+          updatedAt: safeText(parcelShipment.updatedAt),
+        }
+      : null;
     this.buyerShippingAddress = buyerShippingAddress
       ? {
+          addressId: safeText(buyerShippingAddress.addressId),
+          label: safeText(buyerShippingAddress.label),
           name: safeText(buyerShippingAddress.name),
           phone: safeText(buyerShippingAddress.phone),
           address: safeText(buyerShippingAddress.address),
@@ -124,6 +140,12 @@ export class SellerParcelPaymentReview {
 
   static fromJSON(json) {
     const parcelPayment = ParcelPaymentRecord.fromJSON(json);
+    const parcelShipment =
+      json?.parcelShipment && typeof json.parcelShipment === "object"
+        ? json.parcelShipment
+        : json?.shipment && typeof json.shipment === "object"
+          ? json.shipment
+          : null;
     const buyerShippingAddress =
       json?.buyerShippingAddress && typeof json.buyerShippingAddress === "object"
         ? json.buyerShippingAddress
@@ -131,6 +153,7 @@ export class SellerParcelPaymentReview {
           ? json.shippingAddress
           : null;
     const rawStatus = ParcelPaymentRecord.resolveWorkflowStatus([
+      parcelShipment?.status,
       json?.status,
       json?.paymentStatus,
       json?.reviewStatus,
@@ -151,10 +174,12 @@ export class SellerParcelPaymentReview {
       status: normalizeParcelReviewStatus(rawStatus),
       subtotal: json?.subtotal ?? json?.totalPrice ?? json?.amount,
       items: json?.items ?? json?.orderItems ?? json?.products,
+      notes: json?.notes ?? json?.orderNotes ?? json?.order?.notes,
       createdAt: json?.createdAt ?? json?.order?.createdAt,
       submittedAt: json?.submittedAt ?? parcelPayment?.submittedAt ?? json?.updatedAt,
       receiptImageUrl: parcelPayment?.receiptImageUrl,
       paymentMethod: parcelPayment?.getPaymentMethod?.() ?? json?.paymentMethod,
+      parcelShipment,
       buyerShippingAddress,
       adminReport: json?.adminReport ?? json?.report,
     });
@@ -264,13 +289,32 @@ export class SellerParcelPaymentReview {
     return normalizeParcelReviewStatus(this.status);
   }
 
+  getTrackingLine() {
+    if (!this.parcelShipment?.trackingNumber) return "";
+    return [this.parcelShipment.carrier, this.parcelShipment.trackingNumber]
+      .filter(Boolean)
+      .join(" | ");
+  }
+
+  getShipmentUpdatedAtLabel() {
+    return formatDateTime(
+      this.parcelShipment?.shippedAt ||
+      this.parcelShipment?.preparedAt ||
+      this.parcelShipment?.updatedAt,
+    );
+  }
+
   getStatusLabel() {
     switch (this.getEffectiveStatus()) {
       case "pending_payment_verification":
       case "pending_seller_confirmation":
         return this.requiresReceipt() ? "รอตรวจสอบการชำระ" : "รอตรวจสอบคำสั่งซื้อ";
+      case "preparing_parcel":
+        return "กำลังเตรียมพัสดุ";
       case "awaiting_parcel_pickup":
         return "รอรับพัสดุ";
+      case "parcel_in_transit":
+        return "จัดส่งพัสดุแล้ว";
       case "reported_to_admin":
         return "ส่งให้ Admin ตรวจสอบ";
       case "cancelled":

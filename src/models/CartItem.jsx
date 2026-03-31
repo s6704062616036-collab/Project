@@ -1,5 +1,16 @@
 import { ShopProduct } from "./ShopProduct";
 
+const apiBaseUrl = `${import.meta.env.VITE_API_URL ?? ""}`.trim().replace(/\/+$/, "");
+
+const toAbsoluteApiUrl = (value) => {
+  const normalizedValue = `${value ?? ""}`.trim();
+  if (!normalizedValue) return "";
+  if (/^(?:https?:)?\/\//i.test(normalizedValue)) return normalizedValue;
+  if (normalizedValue.startsWith("blob:") || normalizedValue.startsWith("data:")) return normalizedValue;
+  if (normalizedValue.startsWith("/")) return apiBaseUrl ? `${apiBaseUrl}${normalizedValue}` : normalizedValue;
+  return normalizedValue;
+};
+
 export class CartItem {
   constructor({
     id,
@@ -14,6 +25,9 @@ export class CartItem {
     shopName,
     shopAvatarUrl,
     shopParcelQrCodeUrl,
+    shopBankName,
+    shopBankAccountName,
+    shopBankAccountNumber,
     product,
   } = {}) {
     this.id = id ?? "";
@@ -21,13 +35,16 @@ export class CartItem {
     this.productId = productId ?? "";
     this.ownerId = ownerId ?? "";
     this.name = name ?? "";
-    this.imageUrl = imageUrl ?? "";
+    this.imageUrl = toAbsoluteApiUrl(imageUrl);
     this.price = price ?? 0;
     this.quantity = Math.max(1, Number(quantity) || 1);
     this.shopId = shopId ?? "";
     this.shopName = shopName ?? "";
-    this.shopAvatarUrl = shopAvatarUrl ?? "";
-    this.shopParcelQrCodeUrl = shopParcelQrCodeUrl ?? "";
+    this.shopAvatarUrl = toAbsoluteApiUrl(shopAvatarUrl);
+    this.shopParcelQrCodeUrl = toAbsoluteApiUrl(shopParcelQrCodeUrl);
+    this.shopBankName = `${shopBankName ?? ""}`.trim();
+    this.shopBankAccountName = `${shopBankAccountName ?? ""}`.trim();
+    this.shopBankAccountNumber = `${shopBankAccountNumber ?? ""}`.trim();
     this.product = product ? ShopProduct.fromJSON(product) : null;
   }
 
@@ -57,6 +74,9 @@ export class CartItem {
         shopJson?.parcelQrCodeUrl ??
         shopJson?.paymentQrCodeUrl ??
         shopJson?.qrCodeUrl,
+      shopBankName: json?.shopBankName ?? shopJson?.bankName,
+      shopBankAccountName: json?.shopBankAccountName ?? shopJson?.bankAccountName,
+      shopBankAccountNumber: json?.shopBankAccountNumber ?? shopJson?.bankAccountNumber,
       product: productJson,
     });
   }
@@ -97,6 +117,10 @@ export class CartItem {
 
   hasParcelQrCode() {
     return Boolean(`${this.shopParcelQrCodeUrl ?? ""}`.trim());
+  }
+
+  hasBankAccount() {
+    return Boolean(this.shopBankName && this.shopBankAccountName && this.shopBankAccountNumber);
   }
 
   toProductPayload() {

@@ -54,6 +54,15 @@ const formatDateTime = (value) => {
   }).format(date);
 };
 
+const formatDateOnly = (value) => {
+  const date = new Date(safeText(value));
+  if (!safeText(value) || Number.isNaN(date.getTime())) return "-";
+
+  return new Intl.DateTimeFormat("th-TH", {
+    dateStyle: "medium",
+  }).format(date);
+};
+
 export class AdminMember {
   constructor({
     id,
@@ -70,6 +79,7 @@ export class AdminMember {
     shopName,
     shopDescription,
     citizenId,
+    birthDate,
     kycCitizenId,
     kycQrCodeUrl,
     hasPendingKycSubmission,
@@ -93,6 +103,7 @@ export class AdminMember {
     this.shopName = shopName ?? "";
     this.shopDescription = shopDescription ?? "";
     this.citizenId = toDigits(citizenId).slice(0, 13);
+    this.birthDate = safeText(birthDate);
     this.kycCitizenId = toDigits(kycCitizenId ?? citizenId).slice(0, 13);
     this.kycQrCodeUrl = kycQrCodeUrl ?? "";
     this.hasPendingKycSubmission = Boolean(hasPendingKycSubmission);
@@ -299,6 +310,20 @@ export class AdminMember {
           ["merchant", "citizenId"],
         ]),
       ).slice(0, 13),
+      birthDate: safeText(
+        pickFirstDefined(source, [
+          ["birthDate"],
+          ["member", "birthDate"],
+          ["user", "birthDate"],
+          ["shop", "birthDate"],
+          ["shopProfile", "birthDate"],
+          ["merchant", "birthDate"],
+          ["pendingSubmission", "birthDate"],
+          ["pendingKycSubmission", "birthDate"],
+          ["kycSubmission", "birthDate"],
+          ["submission", "birthDate"],
+        ]),
+      ),
       kycCitizenId: effectiveCitizenId,
       kycQrCodeUrl: effectiveKycQrCodeUrl,
       hasPendingKycSubmission:
@@ -421,6 +446,10 @@ export class AdminMember {
 
   getKycCitizenId() {
     return this.kycCitizenId || this.citizenId || "";
+  }
+
+  getBirthDateLabel() {
+    return formatDateOnly(this.birthDate);
   }
 
   getKycQrCodeUrl() {

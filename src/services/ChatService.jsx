@@ -16,7 +16,6 @@ export class ChatService {
     this.http = new HttpClient({ baseUrl: import.meta.env.VITE_API_URL ?? "" });
   }
 
-  // โครง backend: GET /api/chats (ดึงรายการแชทของผู้ใช้จาก database)
   async listMyChats() {
     const result = await this.http.get("/api/chats");
     const chats = Array.isArray(result?.chats)
@@ -26,7 +25,6 @@ export class ChatService {
     return { chats };
   }
 
-  // โครง backend: GET /api/chats/:chatId/messages (ดึงข้อความในห้องแชทจาก database)
   async listMessages(chatId) {
     const normalizedChatId = safeText(chatId);
     if (!normalizedChatId) return { messages: [] };
@@ -42,7 +40,6 @@ export class ChatService {
     };
   }
 
-  // โครง backend: POST /api/chats (เริ่มห้องแชทใหม่และเก็บลง database)
   async startChat({ productId, ownerId, message } = {}) {
     const result = await this.http.post("/api/chats", {
       productId,
@@ -57,22 +54,25 @@ export class ChatService {
     };
   }
 
-  // โครง backend: POST /api/chats/:chatId/messages (ส่งข้อความ/รูป และ persist ลง database)
-  async sendMessage({ chatId, text, imageFile } = {}) {
+  async sendMessage({ chatId, text, imageFile, videoFile } = {}) {
     const normalizedChatId = safeText(chatId);
     const normalizedText = safeText(text);
     if (!normalizedChatId) throw new Error("ไม่พบ chatId");
-    if (!normalizedText && !imageFile) {
-      throw new Error("กรุณากรอกข้อความหรือแนบรูปภาพ");
+    if (imageFile && videoFile) {
+      throw new Error("กรุณาแนบได้ทีละ 1 ไฟล์");
+    }
+    if (!normalizedText && !imageFile && !videoFile) {
+      throw new Error("กรุณากรอกข้อความหรือแนบรูปภาพ/วิดีโอ");
     }
 
     const endpoint = `/api/chats/${encodeURIComponent(normalizedChatId)}/messages`;
-    const hasImage = Boolean(imageFile);
-    const body = hasImage ? new FormData() : { text: normalizedText };
+    const hasMedia = Boolean(imageFile || videoFile);
+    const body = hasMedia ? new FormData() : { text: normalizedText };
 
-    if (hasImage) {
+    if (hasMedia) {
       body.append("text", normalizedText);
-      body.append("image", imageFile);
+      if (imageFile) body.append("image", imageFile);
+      if (videoFile) body.append("video", videoFile);
     }
 
     const result = await this.http.request(endpoint, {
@@ -86,7 +86,6 @@ export class ChatService {
     };
   }
 
-  // โครง backend: POST /api/chats/:chatId/meetup-proposals/:messageId/respond
   async respondMeetupProposal({ chatId, messageId, action, location } = {}) {
     const normalizedChatId = safeText(chatId);
     const normalizedMessageId = safeText(messageId);
@@ -106,6 +105,24 @@ export class ChatService {
         action: normalizedAction,
         location: normalizedLocation,
       },
+    );
+
+    return {
+      chat: result?.chat ? ChatRoom.fromJSON(result.chat) : null,
+      message: result?.message ? ChatMessage.fromJSON(result.message) : null,
+    };
+  }
+
+  async confirmMeetupHandover({ chatId, messageId } = {}) {
+    const normalizedChatId = safeText(chatId);
+    const normalizedMessageId = safeText(messageId);
+
+    if (!normalizedChatId) throw new Error("ไม่พบ chatId");
+    if (!normalizedMessageId) throw new Error("ไม่พบ messageId");
+
+    const result = await this.http.post(
+      `/api/chats/${encodeURIComponent(normalizedChatId)}/meetup-proposals/${encodeURIComponent(normalizedMessageId)}/handover`,
+      {},
     );
 
     return {

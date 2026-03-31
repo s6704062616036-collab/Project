@@ -2,12 +2,6 @@ import React from "react";
 import { AuthService } from "../services/AuthService";
 import { isEmail, minLen } from "../utils/validators";
 
-/**
- * RegisterPage (single step)
- * - คง layout card เดิมของเว็บ
- * - ส่งข้อมูลสมัครสมาชิกเป็น payload เดียวไป backend/service
- * - backend เป็นผู้รับผิดชอบ persist ลง database
- */
 export class RegisterPage extends React.Component {
   state = {
     firstName: "",
@@ -15,25 +9,28 @@ export class RegisterPage extends React.Component {
     phone: "",
     email: "",
     password: "",
+    confirmPassword: "",
     loading: false,
     error: "",
   };
 
   auth = AuthService.instance();
 
-  // -------- OOP helpers --------
   setField = (name, value) => this.setState({ [name]: value, error: "" });
 
   onChange = (e) => this.setField(e.target.name, e.target.value);
 
-  // -------- validation --------
   validateForm() {
-    const { firstName, lastName, phone, email, password } = this.state;
+    const { firstName, lastName, phone, email, password, confirmPassword } = this.state;
+
     if (!minLen(firstName, 2)) return "กรุณากรอกชื่อ";
     if (!minLen(lastName, 2)) return "กรุณากรอกนามสกุล";
     if (!minLen(phone, 9)) return "กรุณากรอกเบอร์โทรศัพท์";
     if (!isEmail(email)) return "อีเมลไม่ถูกต้อง";
     if (!minLen(password, 6)) return "รหัสผ่านอย่างน้อย 6 ตัวอักษร";
+    if (!minLen(confirmPassword, 6)) return "กรุณายืนยันรหัสผ่าน";
+    if (password !== confirmPassword) return "รหัสผ่านไม่ตรงกัน";
+
     return "";
   }
 
@@ -47,7 +44,6 @@ export class RegisterPage extends React.Component {
     };
   }
 
-  // -------- actions --------
   onSubmit = async (e) => {
     e.preventDefault();
     const msg = this.validateForm();
@@ -64,12 +60,18 @@ export class RegisterPage extends React.Component {
     }
   };
 
-  // -------- UI bits --------
-  inputClass =
-    "w-full rounded-xl border border-zinc-200 px-3 py-2 outline-none focus:ring-2 focus:ring-zinc-300";
+  inputClass = "w-full rounded-xl border border-zinc-200 px-3 py-2.5 outline-none";
 
   renderFormFields() {
-    const { firstName, lastName, phone, email, password, loading } = this.state;
+    const {
+      firstName,
+      lastName,
+      phone,
+      email,
+      password,
+      confirmPassword,
+      loading,
+    } = this.state;
 
     return (
       <div className="space-y-3">
@@ -90,7 +92,13 @@ export class RegisterPage extends React.Component {
 
         <div className="space-y-1">
           <label className="text-sm font-medium">อีเมล</label>
-          <input className={this.inputClass} name="email" value={email} onChange={this.onChange} autoComplete="email" />
+          <input
+            className={this.inputClass}
+            name="email"
+            value={email}
+            onChange={this.onChange}
+            autoComplete="email"
+          />
         </div>
 
         <div className="space-y-1">
@@ -100,6 +108,18 @@ export class RegisterPage extends React.Component {
             name="password"
             type="password"
             value={password}
+            onChange={this.onChange}
+            autoComplete="new-password"
+          />
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-sm font-medium">ยืนยันรหัสผ่าน</label>
+          <input
+            className={this.inputClass}
+            name="confirmPassword"
+            type="password"
+            value={confirmPassword}
             onChange={this.onChange}
             autoComplete="new-password"
           />
@@ -120,24 +140,24 @@ export class RegisterPage extends React.Component {
     const { error } = this.state;
 
     return (
-      <div className="min-h-dvh grid place-items-center bg-zinc-50 p-4">
-        <form className="w-full max-w-sm rounded-2xl bg-white p-6 shadow space-y-4" onSubmit={this.onSubmit}>
-          <div className="text-center space-y-2">
+      <div className="app-auth-shell grid min-h-dvh place-items-center p-4">
+        <form className="app-auth-card w-full max-w-sm rounded-[2rem] p-6 space-y-4" onSubmit={this.onSubmit}>
+          <div className="relative z-10 text-center space-y-2">
             <h1 className="text-xl font-semibold">ลงทะเบียน</h1>
           </div>
 
           {error && (
-            <div className="rounded-xl bg-red-50 p-3 text-sm text-red-700">
+            <div className="relative z-10 rounded-xl bg-red-50 p-3 text-sm text-red-700">
               {error}
             </div>
           )}
 
-          {this.renderFormFields()}
+          <div className="relative z-10">{this.renderFormFields()}</div>
 
           <button
             type="button"
             onClick={this.props.onGoLogin}
-            className="w-full rounded-xl border border-zinc-200 py-2 font-medium"
+            className="relative z-10 w-full rounded-xl border border-zinc-200 py-2.5 font-medium"
           >
             กลับไปหน้า Login
           </button>
