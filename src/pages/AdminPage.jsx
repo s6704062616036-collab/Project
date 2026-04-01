@@ -4,88 +4,19 @@ import { AdminDashboardSummary } from "../models/AdminDashboardSummary";
 import { AdminCategory } from "../models/AdminCategory";
 import { NotificationBellButton } from "../components/NotificationBellButton";
 import { ProductCardImage } from "../components/ProductCardImage";
-
-const SECTIONS = [
-  { key: "dashboard", label: "Dashboard", description: "ภาพรวมของระบบผู้ดูแล" },
-  { key: "members", label: "จัดการสมาชิก", description: "ตรวจสอบ KYC และสถานะบัญชีผู้ใช้" },
-  { key: "reports", label: "จัดการเนื้อหา", description: "ตรวจสอบรายงานสินค้าและร้านค้าที่ถูกรายงาน" },
-  { key: "products", label: "จัดการสินค้า", description: "ค้นหา ตรวจสอบ และลบสินค้าได้โดยตรง" },
-  { key: "categories", label: "จัดการหมวดหมู่", description: "เพิ่ม แก้ไข และลบหมวดหมู่หลักของระบบ" },
-];
-
-const VALID_SECTIONS = new Set(SECTIONS.map((item) => item.key));
-
-const SUMMARY_CARDS = [
-  ["สมาชิกใหม่", "newUsers", "border-emerald-200 bg-emerald-50/80"],
-  ["ประกาศสินค้า", "activeProducts", "border-amber-200 bg-amber-50/80"],
-  ["แลกเปลี่ยนสำเร็จ", "completedOrders", "border-sky-200 bg-sky-50/80"],
-  ["KYC รอตรวจ", "pendingKyc", "border-orange-200 bg-orange-50/80"],
-  ["รายงานเปิดอยู่", "openReports", "border-rose-200 bg-rose-50/80"],
-];
-
-const getSummaryValue = (summary, key) => {
-  const source = summary && typeof summary === "object" ? summary : {};
-  const aliases = {
-    newUsers: ["newUsers", "newMembersCount"],
-    activeProducts: ["activeProducts", "productAnnouncementsCount"],
-    completedOrders: ["completedOrders", "successfulExchangesCount"],
-    pendingKyc: ["pendingKyc", "pendingKycCount"],
-    openReports: ["openReports", "openReportsCount"],
-  };
-
-  for (const candidateKey of aliases[key] ?? [key]) {
-    const value = Number(source?.[candidateKey]);
-    if (Number.isFinite(value)) {
-      return value;
-    }
-  }
-
-  return 0;
-};
-
-const kycBadge = (status) => {
-  if (status === "approved") return "border-emerald-200 bg-emerald-50 text-emerald-700";
-  if (status === "rejected") return "border-red-200 bg-red-50 text-red-700";
-  if (status === "pending") return "border-orange-200 bg-orange-50 text-orange-700";
-  return "border-zinc-200 bg-zinc-50 text-zinc-600";
-};
-
-const banBadge = (status) => {
-  if (status === "banned") return "border-red-200 bg-red-50 text-red-700";
-  return "border-emerald-200 bg-emerald-50 text-emerald-700";
-};
-
-const bankMatchBadge = (matches) => {
-  if (matches === true) return "border-emerald-200 bg-emerald-50 text-emerald-700";
-  if (matches === false) return "border-amber-200 bg-amber-50 text-amber-700";
-  return "border-zinc-200 bg-zinc-50 text-zinc-600";
-};
-
-const reportBadge = (status) => {
-  if (status === "taken_down") return "border-red-200 bg-red-50 text-red-700";
-  if (status === "dismissed") return "border-zinc-200 bg-zinc-50 text-zinc-600";
-  return "border-orange-200 bg-orange-50 text-orange-700";
-};
-
-const productBadge = (status) => {
-  if (status === "sold") return "border-sky-200 bg-sky-50 text-sky-700";
-  if (status === "inactive" || status === "removed") return "border-zinc-200 bg-zinc-50 text-zinc-600";
-  return "border-emerald-200 bg-emerald-50 text-emerald-700";
-};
-
-const EmptyState = ({ message }) => (
-  <div className="rounded-3xl border border-dashed border-zinc-300 bg-zinc-50 p-10 text-center text-sm text-zinc-500">{message}</div>
-);
-
-const SectionHeader = ({ title, description, right }) => (
-  <div className="mb-5 flex flex-col gap-3 border-b border-zinc-100 pb-4 md:flex-row md:items-start md:justify-between">
-    <div>
-      <div className="text-2xl font-semibold tracking-tight text-zinc-900">{title}</div>
-      <div className="mt-1 text-sm text-zinc-500">{description}</div>
-    </div>
-    {right ? <div className="shrink-0">{right}</div> : null}
-  </div>
-);
+import {
+  AdminSidebarNav,
+  AdminSummaryGrid,
+  EmptyState,
+  SECTIONS,
+  SectionHeader,
+  VALID_SECTIONS,
+  bankMatchBadge,
+  banBadge,
+  kycBadge,
+  productBadge,
+  reportBadge,
+} from "./admin/AdminPageShared";
 
 export class AdminPage extends React.Component {
   state = {
@@ -515,18 +446,7 @@ export class AdminPage extends React.Component {
   };
 
   renderDashboardSection() {
-    return (
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        {SUMMARY_CARDS.map(([label, key, className]) => (
-          <div key={label} className={`rounded-3xl border p-4 shadow-sm ${className}`}>
-            <div className="text-sm font-medium text-zinc-500">{label}</div>
-            <div className="mt-3 text-4xl font-semibold tracking-tight text-zinc-900">
-              {getSummaryValue(this.state.summary, key)}
-            </div>
-          </div>
-        ))}
-      </div>
-    );
+    return <AdminSummaryGrid summary={this.state.summary} />;
   }
 
   renderMembersSection() {
@@ -733,7 +653,7 @@ export class AdminPage extends React.Component {
     return (
       <div className="min-h-dvh bg-[radial-gradient(circle_at_top_left,_rgba(164,227,216,0.22),_transparent_30%),linear-gradient(180deg,_#f8fafc_0%,_#f5f7fb_100%)]">
         <div className="sticky top-0 z-40 border-b border-zinc-200/70 bg-[#A4E3D8]/90 backdrop-blur-sm"><div className="mx-auto flex max-w-375 items-center gap-4 px-4 py-5"><div className="overflow-hidden rounded-2xl border border-white/70 bg-white/75 shadow-sm"><img src="/App logo.jpg" alt="App logo" className="h-20 w-20 object-cover" /></div><div className="min-w-0 flex-1"><div className="text-lg font-semibold tracking-tight text-zinc-900 md:text-2xl">Administrator System</div><div className="mt-1 text-sm text-zinc-700">ตรวจสอบสมาชิก รายงานสินค้า รายงานร้านค้า และข้อมูลหลักของเว็บไซต์</div></div><div className="hidden rounded-2xl border border-zinc-200 bg-white/80 px-4 py-2 text-sm text-zinc-700 shadow-sm md:block"><div className="font-semibold text-zinc-900">{this.props.user?.name ?? "Admin"}</div><div>{this.props.user?.username ? `@${this.props.user.username}` : this.props.user?.email ?? ""}</div></div><NotificationBellButton unreadCount={Number(this.props.notificationUnreadCount ?? 0) || 0} onClick={this.props.onGoNotifications} className="app-icon-button relative grid h-10 w-10 place-items-center bg-[#F4D03E]" /><button type="button" className="rounded-2xl border border-zinc-200 bg-[#F4D03E] px-4 py-2.5 text-sm font-semibold text-zinc-900 shadow-sm" onClick={this.props.onLogout}>Log out</button></div></div>
-        <div className="mx-auto max-w-375 space-y-6 px-4 py-6"><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">{SUMMARY_CARDS.map(([label, key, className]) => <div key={label} className={`rounded-3xl border p-4 shadow-sm ${className}`}><div className="text-sm font-medium text-zinc-500">{label}</div><div className="mt-3 text-4xl font-semibold tracking-tight text-zinc-900">{getSummaryValue(this.state.summary, key)}</div></div>)}</div>{this.state.error ? <div className="rounded-3xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 shadow-sm">{this.state.error}</div> : null}{this.state.done ? <div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700 shadow-sm">{this.state.done}</div> : null}<div className="grid grid-cols-1 gap-6 xl:grid-cols-[18rem_minmax(0,1fr)]"><aside className="rounded-[28px] border border-zinc-200 bg-white p-3 shadow-sm"><div className="px-3 pb-3 text-sm font-semibold text-zinc-900">เมนูผู้ดูแลระบบ</div><div className="space-y-2">{SECTIONS.map((item) => { const active = item.key === this.state.activeSection; return <button key={item.key} type="button" onClick={() => this.setActiveSection(item.key)} aria-pressed={active} className={`flex h-[96px] w-full flex-col justify-center overflow-hidden rounded-2xl border px-3 py-3 text-left transition ${active ? "border-amber-300 bg-[#F4D03E] text-zinc-900 shadow-sm" : "border-zinc-200 bg-zinc-50 text-zinc-700 hover:bg-zinc-100"}`}><div className="font-semibold leading-tight">{item.label}</div><div className={`mt-1 line-clamp-2 h-8 overflow-hidden text-xs leading-4 ${active ? "text-zinc-700" : "text-zinc-500"}`}>{item.description}</div></button>; })}</div></aside><main className="rounded-[28px] border border-zinc-200 bg-white p-4 shadow-sm md:p-6"><SectionHeader title={activeSection.label} description={activeSection.description} right={this.state.loading ? <div className="text-sm text-zinc-500">กำลังโหลดข้อมูล...</div> : null} />{this.state.loading ? <div className="rounded-3xl border border-dashed border-zinc-300 bg-zinc-50 p-10 text-center text-sm text-zinc-500">กำลังเตรียมข้อมูลผู้ดูแลระบบ...</div> : this.renderSectionContent()}</main></div></div>
+        <div className="mx-auto max-w-375 space-y-6 px-4 py-6"><AdminSummaryGrid summary={this.state.summary} />{this.state.error ? <div className="rounded-3xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 shadow-sm">{this.state.error}</div> : null}{this.state.done ? <div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700 shadow-sm">{this.state.done}</div> : null}<div className="grid grid-cols-1 gap-6 xl:grid-cols-[18rem_minmax(0,1fr)]"><AdminSidebarNav activeSection={this.state.activeSection} onSelect={this.setActiveSection} /><main className="rounded-[28px] border border-zinc-200 bg-white p-4 shadow-sm md:p-6"><SectionHeader title={activeSection.label} description={activeSection.description} right={this.state.loading ? <div className="text-sm text-zinc-500">กำลังโหลดข้อมูล...</div> : null} />{this.state.loading ? <div className="rounded-3xl border border-dashed border-zinc-300 bg-zinc-50 p-10 text-center text-sm text-zinc-500">กำลังเตรียมข้อมูลผู้ดูแลระบบ...</div> : this.renderSectionContent()}</main></div></div>
       </div>
     );
   }
