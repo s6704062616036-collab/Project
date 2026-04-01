@@ -55,6 +55,12 @@ const banBadge = (status) => {
   return "border-emerald-200 bg-emerald-50 text-emerald-700";
 };
 
+const bankMatchBadge = (matches) => {
+  if (matches === true) return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  if (matches === false) return "border-amber-200 bg-amber-50 text-amber-700";
+  return "border-zinc-200 bg-zinc-50 text-zinc-600";
+};
+
 const reportBadge = (status) => {
   if (status === "taken_down") return "border-red-200 bg-red-50 text-red-700";
   if (status === "dismissed") return "border-zinc-200 bg-zinc-50 text-zinc-600";
@@ -541,11 +547,23 @@ export class AdminPage extends React.Component {
                     <div className="flex flex-wrap gap-2 text-xs font-semibold">
                       <div className={`rounded-full border px-2.5 py-1 ${kycBadge(member.kycStatus)}`}>KYC: {member.getKycStatusLabel()}</div>
                       <div className={`rounded-full border px-2.5 py-1 ${banBadge(member.banStatus)}`}>บัญชี: {member.getBanStatusLabel()}</div>
+                      <div className={`rounded-full border px-2.5 py-1 ${bankMatchBadge(member.bankAccountNameMatchesUserName)}`}>บัญชีธนาคาร: {member.getBankAccountNameMatchLabel?.() || "-"}</div>
                     </div>
-                    <div className="grid gap-2 text-sm text-zinc-600 md:grid-cols-2">
-                      <div>อีเมล: {member.email || "-"}</div><div>เบอร์โทร: {member.phone || "-"}</div>
-                      <div>ชื่อร้าน: {member.shopName || "-"}</div><div>วันเกิด: {member.getBirthDateLabel?.() || "-"}</div>
-                      <div>เลขบัตร: {member.getKycCitizenId?.() || "-"}</div><div>ส่ง KYC ล่าสุด: {member.getSubmittedAtLabel?.() || "-"}</div>
+                    <div className="grid gap-3 lg:grid-cols-2">
+                      <div className="grid gap-2 text-sm text-zinc-600 md:grid-cols-2">
+                        <div>อีเมล: {member.email || "-"}</div><div>เบอร์โทร: {member.phone || "-"}</div>
+                        <div>ชื่อร้าน: {member.shopName || "-"}</div><div>วันเกิด: {member.getBirthDateLabel?.() || "-"}</div>
+                        <div>ชื่อจริง: {member.getFirstName?.() || "-"}</div><div>นามสกุล: {member.getLastName?.() || "-"}</div>
+                        <div>เลขบัตร: {member.getKycCitizenId?.() || "-"}</div><div>ส่ง KYC ล่าสุด: {member.getSubmittedAtLabel?.() || "-"}</div>
+                      </div>
+                      <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-3">
+                        <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">ข้อมูลธนาคารสำหรับตรวจสอบ KYC</div>
+                        <div className="grid gap-2 text-sm text-zinc-600">
+                          <div>ธนาคาร: <span className="font-medium text-zinc-900">{member.bankName || "-"}</span></div>
+                          <div>ชื่อบัญชี: <span className="font-medium text-zinc-900">{member.bankAccountName || "-"}</span></div>
+                          <div>เลขบัญชี: <span className="font-medium text-zinc-900">{member.bankAccountNumber || "-"}</span></div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>

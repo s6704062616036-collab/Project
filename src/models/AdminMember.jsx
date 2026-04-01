@@ -81,6 +81,8 @@ export class AdminMember {
   constructor({
     id,
     name,
+    firstName,
+    lastName,
     email,
     phone,
     avatarUrl,
@@ -92,6 +94,10 @@ export class AdminMember {
     shopId,
     shopName,
     shopDescription,
+    bankName,
+    bankAccountName,
+    bankAccountNumber,
+    bankAccountNameMatchesUserName,
     citizenId,
     birthDate,
     kycCitizenId,
@@ -105,6 +111,8 @@ export class AdminMember {
   } = {}) {
     this.id = id ?? "";
     this.name = name ?? "";
+    this.firstName = safeText(firstName);
+    this.lastName = safeText(lastName);
     this.email = email ?? "";
     this.phone = phone ?? "";
     this.avatarUrl = avatarUrl ?? "";
@@ -116,6 +124,11 @@ export class AdminMember {
     this.shopId = shopId ?? "";
     this.shopName = shopName ?? "";
     this.shopDescription = shopDescription ?? "";
+    this.bankName = safeText(bankName);
+    this.bankAccountName = safeText(bankAccountName);
+    this.bankAccountNumber = toDigits(bankAccountNumber).slice(0, 20);
+    this.bankAccountNameMatchesUserName =
+      typeof bankAccountNameMatchesUserName === "boolean" ? bankAccountNameMatchesUserName : null;
     this.citizenId = toDigits(citizenId).slice(0, 13);
     this.birthDate = safeText(birthDate);
     this.kycCitizenId = toDigits(kycCitizenId ?? citizenId).slice(0, 13);
@@ -232,6 +245,20 @@ export class AdminMember {
           ["user", "name"],
         ]),
       ),
+      firstName: safeText(
+        pickFirstDefined(source, [
+          ["firstName"],
+          ["member", "firstName"],
+          ["user", "firstName"],
+        ]),
+      ),
+      lastName: safeText(
+        pickFirstDefined(source, [
+          ["lastName"],
+          ["member", "lastName"],
+          ["user", "lastName"],
+        ]),
+      ),
       email: safeText(
         pickFirstDefined(source, [
           ["email"],
@@ -314,6 +341,34 @@ export class AdminMember {
           ["merchant", "description"],
         ]),
       ),
+      bankName: safeText(
+        pickFirstDefined(source, [
+          ["bankName"],
+          ["shop", "bankName"],
+          ["shopProfile", "bankName"],
+          ["merchant", "bankName"],
+        ]),
+      ),
+      bankAccountName: safeText(
+        pickFirstDefined(source, [
+          ["bankAccountName"],
+          ["shop", "bankAccountName"],
+          ["shopProfile", "bankAccountName"],
+          ["merchant", "bankAccountName"],
+        ]),
+      ),
+      bankAccountNumber: toDigits(
+        pickFirstDefined(source, [
+          ["bankAccountNumber"],
+          ["shop", "bankAccountNumber"],
+          ["shopProfile", "bankAccountNumber"],
+          ["merchant", "bankAccountNumber"],
+        ]),
+      ).slice(0, 20),
+      bankAccountNameMatchesUserName:
+        typeof pickFirstDefined(source, [["bankAccountNameMatchesUserName"]]) === "boolean"
+          ? pickFirstDefined(source, [["bankAccountNameMatchesUserName"]])
+          : null,
       citizenId: toDigits(
         pickFirstDefined(source, [
           ["citizenId"],
@@ -485,5 +540,24 @@ export class AdminMember {
 
   getBanStatusLabel() {
     return this.isBanned() ? "ถูกระงับบัญชี" : "ใช้งานได้";
+  }
+  getFirstName() {
+    if (safeText(this.firstName)) return this.firstName;
+    return safeText(this.name).split(/\s+/).filter(Boolean)[0] ?? "";
+  }
+
+  getLastName() {
+    if (safeText(this.lastName)) return this.lastName;
+    return safeText(this.name)
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(1)
+      .join(" ");
+  }
+
+  getBankAccountNameMatchLabel() {
+    if (this.bankAccountNameMatchesUserName === true) return "ชื่อบัญชีตรงกับชื่อผู้ใช้";
+    if (this.bankAccountNameMatchesUserName === false) return "ชื่อบัญชีอาจไม่ตรงกับชื่อผู้ใช้";
+    return "ยังไม่มีข้อมูลพอให้ตรวจสอบ";
   }
 }
