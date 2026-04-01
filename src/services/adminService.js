@@ -174,6 +174,7 @@ const reviewMemberDecision = async ({ memberId, action, note = "", shopId = "", 
   }
 
   const actedAt = new Date();
+  const normalizedNote = `${note ?? ""}`.trim();
   let shop = null;
 
   if (["approve_kyc", "reject_kyc"].includes(normalizedAction)) {
@@ -194,15 +195,18 @@ const reviewMemberDecision = async ({ memberId, action, note = "", shopId = "", 
       throw error;
     }
 
+    if (normalizedAction === "reject_kyc" && !normalizedNote) {
+      const error = new Error("กรุณาระบุเหตุผลที่ไม่อนุมัติ KYC");
+      error.statusCode = 400;
+      throw error;
+    }
+
     shop.kycStatus = normalizedAction === "approve_kyc" ? "approved" : "rejected";
     shop.kycSubmittedAt = shop.kycSubmittedAt ?? actedAt;
     shop.kycReviewedAt = actedAt;
     shop.kycApprovedAt = normalizedAction === "approve_kyc" ? actedAt : null;
     shop.moderationNote =
-      `${note ?? ""}`.trim() ||
-      (normalizedAction === "reject_kyc"
-        ? "KYC was rejected by an administrator"
-        : "");
+      normalizedAction === "reject_kyc" ? normalizedNote : "";
     user.reviewedAt = actedAt;
     user.moderationNote = shop.moderationNote;
     await user.save();
@@ -230,7 +234,7 @@ const reviewMemberDecision = async ({ memberId, action, note = "", shopId = "", 
     user.banStatus = normalizedAction === "ban" ? "banned" : "active";
     user.reviewedAt = actedAt;
     user.moderationNote =
-      `${note ?? ""}`.trim() ||
+      normalizedNote ||
       (normalizedAction === "ban" ? "Account was banned by an administrator" : "");
     await user.save();
     shop = await Shop.findOne({ owner: user._id });
