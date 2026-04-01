@@ -222,7 +222,7 @@ export class ShopProduct {
     if (!ProductCategory.isValid(this.category)) return "กรุณาเลือกหมวดหมู่สินค้า";
     if (this.getPriceNumber() <= 0) return "กรุณากรอกราคาสินค้าให้มากกว่า 0";
     if (!selectedFiles.length && !this.getImageUrls().length) return "กรุณาอัปโหลดรูปภาพสินค้า";
-    if (selectedFiles.length > 5) return "อัปโหลดรูปสินค้าได้สูงสุด 5 รูป";
+    if (selectedFiles.length > 4) return "อัปโหลดรูปสินค้าได้สูงสุด 4 รูป";
     return "";
   }
 

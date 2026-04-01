@@ -538,6 +538,9 @@ class HomeProductCard extends React.Component {
           <div className="app-chip inline-flex w-fit rounded-full px-2 py-0.5 text-xs">
             {ProductCategory.getLabel(product?.category)}
           </div>
+          {product?.getProvinceLabel?.() ? (
+            <div className="text-xs text-zinc-500">จังหวัด: {product.getProvinceLabel()}</div>
+          ) : null}
           <div className="text-base font-semibold text-zinc-900">{product?.getPriceLabel?.() ?? "฿0.00"}</div>
           <button
             type="button"

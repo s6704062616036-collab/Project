@@ -460,7 +460,7 @@ export class MyShopService {
       ? imageFiles.filter(Boolean)
       : imageFiles
         ? [imageFiles]
-        : []).slice(0, 5);
+        : []).slice(0, 4);
 
     files.forEach((file) => {
       formData.append("images", file);
@@ -493,7 +493,7 @@ export class MyShopService {
       ? imageFiles.filter(Boolean)
       : imageFiles
         ? [imageFiles]
-        : []).slice(0, 5);
+        : []).slice(0, 4);
 
     files.forEach((file) => {
       formData.append("images", file);

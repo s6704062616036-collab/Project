@@ -673,7 +673,7 @@ export class MyShopPage extends React.Component {
   };
 
   setImageFiles = (files) => {
-    const safeFiles = (Array.isArray(files) ? files.filter(Boolean) : []).slice(0, 5);
+    const safeFiles = (Array.isArray(files) ? files.filter(Boolean) : []).slice(0, 4);
     this.revokePreviewUrls(this.state.imagePreviewUrls);
 
     const imagePreviewUrls =
@@ -686,6 +686,22 @@ export class MyShopPage extends React.Component {
       imagePreviewUrls,
       error: "",
       done: "",
+    });
+  };
+
+  removeImageFileAt = (indexToRemove) => {
+    this.setState((state) => {
+      const nextImageFiles = (state.imageFiles ?? []).filter((_, index) => index !== indexToRemove);
+      const nextImagePreviewUrls = (state.imagePreviewUrls ?? []).filter((_, index) => index !== indexToRemove);
+      const removedPreviewUrl = (state.imagePreviewUrls ?? [])[indexToRemove];
+      this.revokePreviewUrls(removedPreviewUrl ? [removedPreviewUrl] : []);
+
+      return {
+        imageFiles: nextImageFiles,
+        imagePreviewUrls: nextImagePreviewUrls,
+        error: "",
+        done: "",
+      };
     });
   };
 
@@ -727,7 +743,7 @@ export class MyShopPage extends React.Component {
   };
 
   setEditImageFiles = (files) => {
-    const safeFiles = (Array.isArray(files) ? files.filter(Boolean) : []).slice(0, 5);
+    const safeFiles = (Array.isArray(files) ? files.filter(Boolean) : []).slice(0, 4);
     this.revokePreviewUrls(this.state.editImagePreviewUrls);
 
     const editImagePreviewUrls =
@@ -740,6 +756,22 @@ export class MyShopPage extends React.Component {
       editImagePreviewUrls,
       error: "",
       done: "",
+    });
+  };
+
+  removeEditImageFileAt = (indexToRemove) => {
+    this.setState((state) => {
+      const nextImageFiles = (state.editImageFiles ?? []).filter((_, index) => index !== indexToRemove);
+      const nextImagePreviewUrls = (state.editImagePreviewUrls ?? []).filter((_, index) => index !== indexToRemove);
+      const removedPreviewUrl = (state.editImagePreviewUrls ?? [])[indexToRemove];
+      this.revokePreviewUrls(removedPreviewUrl ? [removedPreviewUrl] : []);
+
+      return {
+        editImageFiles: nextImageFiles,
+        editImagePreviewUrls: nextImagePreviewUrls,
+        error: "",
+        done: "",
+      };
     });
   };
 
@@ -1102,6 +1134,7 @@ export class MyShopPage extends React.Component {
             onClose={this.closeCreatePopup}
             onChangeField={this.setDraftField}
             onChangeImageFiles={this.setImageFiles}
+            onRemoveImageAt={this.removeImageFileAt}
             onSubmit={this.submitProduct}
           />
         ) : null}
@@ -1117,6 +1150,7 @@ export class MyShopPage extends React.Component {
             onClose={this.closeEditPopup}
             onChangeField={this.setEditDraftField}
             onChangeImageFiles={this.setEditImageFiles}
+            onRemoveImageAt={this.removeEditImageFileAt}
             onSubmit={this.submitEditProduct}
           />
         ) : null}
@@ -1519,6 +1553,9 @@ class ProductCard extends React.Component {
           <div className="inline-flex w-fit rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-700">
             {ProductCategory.getLabel(product.category)}
           </div>
+          {product.getProvinceLabel?.() ? (
+            <div className="text-xs text-zinc-500">จังหวัด: {product.getProvinceLabel()}</div>
+          ) : null}
           <div className="text-sm font-medium text-zinc-700">{product.getPriceLabel()}</div>
           <p className="text-sm text-zinc-500 whitespace-pre-line break-words">
             {product.description || "ไม่มีคำอธิบาย"}
@@ -1548,6 +1585,7 @@ class CreateProductModal extends React.Component {
       onClose,
       onChangeField,
       onChangeImageFiles,
+      onRemoveImageAt,
     } = this.props;
 
     return (
@@ -1633,15 +1671,24 @@ class CreateProductModal extends React.Component {
               {imageFiles?.length ? (
                 <div className="text-xs text-zinc-500">เลือกแล้ว {imageFiles.length} รูป</div>
               ) : null}
+              <div className="text-xs text-zinc-400">เลือกได้สูงสุด 4 รูป และลบรูปที่เลือกผิดได้ก่อนลงสินค้า</div>
 
               {imagePreviewUrls?.length ? (
                 <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                   {imagePreviewUrls.map((previewUrl, index) => (
                     <div
                       key={`preview-${index}`}
-                      className="aspect-square rounded-lg overflow-hidden border border-zinc-200 bg-zinc-100"
+                      className="relative aspect-square rounded-lg overflow-hidden border border-zinc-200 bg-zinc-100"
                     >
                       <img src={previewUrl} alt={`preview-${index + 1}`} className="h-full w-full object-cover" />
+                      <button
+                        type="button"
+                        className="absolute right-1 top-1 grid h-7 w-7 place-items-center rounded-full bg-black/70 text-sm font-semibold text-white hover:bg-black/80"
+                        onClick={() => onRemoveImageAt?.(index)}
+                        title="ลบรูปนี้"
+                      >
+                        ×
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -1702,6 +1749,7 @@ class EditProductModal extends React.Component {
       onClose,
       onChangeField,
       onChangeImageFiles,
+      onRemoveImageAt,
     } = this.props;
 
     const existingImageUrls = draftProduct?.getImageUrls?.() ?? [];
@@ -1789,13 +1837,14 @@ class EditProductModal extends React.Component {
               {imageFiles?.length ? (
                 <div className="text-xs text-zinc-500">เลือกแล้ว {imageFiles.length} รูป (จะแทนที่รูปเดิม)</div>
               ) : null}
+              <div className="text-xs text-zinc-400">เลือกได้สูงสุด 4 รูป และลบรูปที่เลือกผิดได้ก่อนบันทึก</div>
 
               {!imageFiles?.length && existingImageUrls.length ? (
                 <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                   {existingImageUrls.map((url, index) => (
                     <div
                       key={`existing-${index}`}
-                      className="aspect-square rounded-lg overflow-hidden border border-zinc-200 bg-zinc-100"
+                      className="relative aspect-square rounded-lg overflow-hidden border border-zinc-200 bg-zinc-100"
                     >
                       <img src={url} alt={`existing-${index + 1}`} className="h-full w-full object-cover" />
                     </div>
@@ -1811,6 +1860,14 @@ class EditProductModal extends React.Component {
                       className="aspect-square rounded-lg overflow-hidden border border-zinc-200 bg-zinc-100"
                     >
                       <img src={previewUrl} alt={`preview-edit-${index + 1}`} className="h-full w-full object-cover" />
+                      <button
+                        type="button"
+                        className="absolute right-1 top-1 grid h-7 w-7 place-items-center rounded-full bg-black/70 text-sm font-semibold text-white hover:bg-black/80"
+                        onClick={() => onRemoveImageAt?.(index)}
+                        title="ลบรูปนี้"
+                      >
+                        ×
+                      </button>
                     </div>
                   ))}
                 </div>

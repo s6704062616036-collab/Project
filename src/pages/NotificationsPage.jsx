@@ -9,6 +9,7 @@ export class NotificationsPage extends React.Component {
     notifications: [],
     markingId: "",
     markingAll: false,
+    deletingId: "",
   };
 
   notificationService = NotificationService.instance();
@@ -89,6 +90,27 @@ export class NotificationsPage extends React.Component {
     }
   };
 
+  deleteNotification = async (notification) => {
+    const notificationId = `${notification?.id ?? ""}`.trim();
+    if (!notificationId || notification?.isUnread?.()) return;
+
+    this.setState({ deletingId: notificationId, error: "", done: "" });
+    try {
+      const result = await this.notificationService.deleteNotification(notificationId);
+      this.setState((state) => ({
+        notifications: (state.notifications ?? []).filter((item) => item?.id !== notificationId),
+        done: result?.message ?? "ลบข้อความที่อ่านแล้วเรียบร้อย",
+      }));
+      this.props.onNotificationsChanged?.();
+    } catch (error) {
+      this.setState({
+        error: error?.message ?? "ลบข้อความแจ้งเตือนไม่สำเร็จ",
+      });
+    } finally {
+      this.setState({ deletingId: "" });
+    }
+  };
+
   openNotification = async (notification) => {
     await this.markAsRead(notification);
     this.props.onOpenNotification?.(notification);
@@ -106,6 +128,7 @@ export class NotificationsPage extends React.Component {
     const isUnread = notification?.isUnread?.() ?? false;
     const targetLabel = notification?.hasTarget?.() ? "เปิดดู" : "";
     const isMarking = this.state.markingId === notification?.id;
+    const isDeleting = this.state.deletingId === notification?.id;
 
     return (
       <article
@@ -156,6 +179,18 @@ export class NotificationsPage extends React.Component {
                 disabled={isMarking}
               >
                 {isMarking ? "กำลังอัปเดต..." : "อ่านแล้ว"}
+              </button>
+            ) : null}
+            {!notification?.isUnread?.() ? (
+              <button
+                type="button"
+                className="grid h-10 w-10 place-items-center rounded-xl border border-rose-200 bg-rose-50 text-base font-semibold text-rose-600 transition hover:bg-rose-100 disabled:opacity-60"
+                onClick={() => this.deleteNotification(notification)}
+                disabled={isDeleting}
+                title="ลบข้อความนี้"
+                aria-label="ลบข้อความนี้"
+              >
+                {isDeleting ? "..." : "×"}
               </button>
             ) : null}
             {targetLabel ? (

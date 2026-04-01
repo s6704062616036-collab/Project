@@ -51,4 +51,18 @@ export class NotificationService {
       message: result?.message ?? "",
     };
   }
+
+  async deleteNotification(notificationId) {
+    const normalizedNotificationId = `${notificationId ?? ""}`.trim();
+    if (!normalizedNotificationId) {
+      return { deletedId: "", unreadCount: 0, message: "" };
+    }
+
+    const result = await this.http.delete(`/api/notifications/${encodeURIComponent(normalizedNotificationId)}`);
+    return {
+      deletedId: `${result?.deletedId ?? ""}`.trim(),
+      unreadCount: Number(result?.unreadCount) || 0,
+      message: result?.message ?? "",
+    };
+  }
 }

@@ -35,6 +35,53 @@ const getStatusBadgeClassName = (status) => {
   }
 };
 
+const ARCHIVED_ORDER_STATUSES = new Set([
+  "completed",
+  "cancelled",
+  "cancelled_by_seller",
+  "rejected",
+  "rejected_by_buyer",
+]);
+
+const isArchivedOrder = (order) =>
+  ARCHIVED_ORDER_STATUSES.has(order?.getEffectiveStatus?.() ?? `${order?.status ?? ""}`.trim());
+
+const renderOrderSection = ({
+  title,
+  description,
+  orders,
+  emptyLabel,
+  actionLoadingKey,
+  onSubmitShopOrderDecision,
+}) => (
+  <section className="space-y-3">
+    <div className="flex flex-wrap items-end justify-between gap-2">
+      <div>
+        <div className="text-base font-semibold text-zinc-900">{title}</div>
+        <div className="text-sm text-zinc-500">{description}</div>
+      </div>
+      <div className="text-xs font-medium text-zinc-400">{orders.length} รายการ</div>
+    </div>
+
+    {orders.length ? (
+      <div className="space-y-4">
+        {orders.map((order) => (
+          <OrderCard
+            key={order.id || order.createdAt}
+            order={order}
+            actionLoadingKey={actionLoadingKey}
+            onSubmitShopOrderDecision={onSubmitShopOrderDecision}
+          />
+        ))}
+      </div>
+    ) : (
+      <div className="rounded-xl border border-dashed border-zinc-300 bg-zinc-50 p-5 text-center text-sm text-zinc-500">
+        {emptyLabel}
+      </div>
+    )}
+  </section>
+);
+
 export class MyOrdersPage extends React.Component {
   state = {
     loading: true,
@@ -177,6 +224,8 @@ export class MyOrdersPage extends React.Component {
     const { loading, backgroundRefreshing, error, done, orders, showProfilePopup, actionLoadingKey } = this.state;
     const chatUnreadCount = Number(this.props.chatUnreadCount ?? 0) || 0;
     const notificationUnreadCount = Number(this.props.notificationUnreadCount ?? 0) || 0;
+    const inProgressOrders = orders.filter((order) => !isArchivedOrder(order));
+    const archivedOrders = orders.filter((order) => isArchivedOrder(order));
 
     return (
       <div className="min-h-dvh bg-zinc-50">
@@ -259,15 +308,24 @@ export class MyOrdersPage extends React.Component {
             ) : null}
 
             {!loading && !error && orders.length ? (
-              <div className="space-y-4">
-                {orders.map((order) => (
-                  <OrderCard
-                    key={order.id || order.createdAt}
-                    order={order}
-                    actionLoadingKey={actionLoadingKey}
-                    onSubmitShopOrderDecision={this.submitShopOrderDecision}
-                  />
-                ))}
+              <div className="space-y-8">
+                {renderOrderSection({
+                  title: "กำลังดำเนินการ",
+                  description: "รายการที่ยังอยู่ระหว่างรอยืนยัน จัดส่ง นัดรับ หรือรอการตัดสินใจ",
+                  orders: inProgressOrders,
+                  emptyLabel: "ตอนนี้ไม่มีรายการที่กำลังดำเนินการ",
+                  actionLoadingKey,
+                  onSubmitShopOrderDecision: this.submitShopOrderDecision,
+                })}
+
+                {renderOrderSection({
+                  title: "ประวัติการสั่งซื้อ",
+                  description: "รายการที่เสร็จสิ้น ยกเลิก หรือปิดรายการไปแล้ว",
+                  orders: archivedOrders,
+                  emptyLabel: "ยังไม่มีประวัติการสั่งซื้อที่ผ่านมา",
+                  actionLoadingKey,
+                  onSubmitShopOrderDecision: this.submitShopOrderDecision,
+                })}
               </div>
             ) : null}
           </div>

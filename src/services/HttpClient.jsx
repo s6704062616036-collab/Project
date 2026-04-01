@@ -25,4 +25,8 @@ export class HttpClient {
   post(path, body, opts) {
     return this.request(path, { ...(opts ?? {}), method: "POST", body });
   }
+
+  delete(path, opts) {
+    return this.request(path, { ...(opts ?? {}), method: "DELETE" });
+  }
 }
