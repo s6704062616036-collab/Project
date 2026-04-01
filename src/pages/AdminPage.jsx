@@ -3,6 +3,7 @@ import { AdminService } from "../services/AdminService";
 import { AdminDashboardSummary } from "../models/AdminDashboardSummary";
 import { AdminCategory } from "../models/AdminCategory";
 import { NotificationBellButton } from "../components/NotificationBellButton";
+import { ProductCardImage } from "../components/ProductCardImage";
 
 const SECTIONS = [
   { key: "dashboard", label: "Dashboard", description: "ภาพรวมของระบบผู้ดูแล" },
@@ -464,8 +465,12 @@ export class AdminPage extends React.Component {
             <article key={report.id} className="rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm">
               <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
                 <div className="flex gap-4">
-                  <div className="h-24 w-24 shrink-0 overflow-hidden rounded-2xl bg-zinc-100">
-                    {report.getPreviewImageUrl?.() ? <img src={report.getPreviewImageUrl()} alt={report.getTargetName?.() ?? "report"} className="h-full w-full object-cover" /> : null}
+                  <div className="grid h-24 w-24 shrink-0 place-items-center overflow-hidden rounded-2xl bg-zinc-100 px-2 text-center">
+                    <ProductCardImage
+                      src={report.getPreviewImageUrl?.()}
+                      alt={report.getTargetName?.() ?? "report"}
+                      emptyLabel="ไม่มีรูปภาพ"
+                    />
                   </div>
                   <div className="space-y-2">
                     <div className="flex flex-wrap items-center gap-2">

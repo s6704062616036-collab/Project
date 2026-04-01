@@ -1,5 +1,3 @@
-const safeText = (value) => `${value ?? ""}`.trim();
-
 const formatDateTime = (value) => {
   const date = new Date(value ?? "");
   if (!safeText(value) || Number.isNaN(date.getTime())) return "-";
@@ -8,6 +6,24 @@ const formatDateTime = (value) => {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(date);
+};
+
+const safeText = (value) => `${value ?? ""}`.trim();
+const apiBaseUrl = `${import.meta.env.VITE_API_URL ?? ""}`.trim().replace(/\/+$/, "");
+
+const toAbsoluteApiUrl = (value) => {
+  const normalizedValue = safeText(value).replace(/\\/g, "/");
+  if (!normalizedValue) return "";
+  if (/^(?:https?:)?\/\//i.test(normalizedValue)) return normalizedValue;
+  if (normalizedValue.startsWith("blob:") || normalizedValue.startsWith("data:")) return normalizedValue;
+  if (normalizedValue.startsWith("/uploads/")) {
+    return apiBaseUrl && apiBaseUrl !== "/api" ? `${apiBaseUrl}${normalizedValue}` : normalizedValue;
+  }
+  if (normalizedValue.startsWith("uploads/")) {
+    return apiBaseUrl && apiBaseUrl !== "/api" ? `${apiBaseUrl}/${normalizedValue}` : `/${normalizedValue}`;
+  }
+  if (normalizedValue.startsWith("/")) return apiBaseUrl ? `${apiBaseUrl}${normalizedValue}` : normalizedValue;
+  return normalizedValue;
 };
 
 export class AdminProductReport {
@@ -37,11 +53,11 @@ export class AdminProductReport {
     this.productOwnerId = productOwnerId ?? "";
     this.productName = productName ?? "";
     this.productCategory = productCategory ?? "";
-    this.productImageUrl = productImageUrl ?? "";
+    this.productImageUrl = toAbsoluteApiUrl(productImageUrl);
     this.shopId = shopId ?? "";
     this.shopOwnerId = shopOwnerId ?? "";
     this.shopName = shopName ?? "";
-    this.shopAvatarUrl = shopAvatarUrl ?? "";
+    this.shopAvatarUrl = toAbsoluteApiUrl(shopAvatarUrl);
     this.reporterId = reporterId ?? "";
     this.reporterName = reporterName ?? "";
     this.reason = reason ?? "";

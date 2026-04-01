@@ -7,6 +7,12 @@ const toAbsoluteApiUrl = (value) => {
   if (!normalizedValue) return "";
   if (/^(?:https?:)?\/\//i.test(normalizedValue)) return normalizedValue;
   if (normalizedValue.startsWith("blob:") || normalizedValue.startsWith("data:")) return normalizedValue;
+  if (normalizedValue.startsWith("/uploads/")) {
+    return apiBaseUrl && apiBaseUrl !== "/api" ? `${apiBaseUrl}${normalizedValue}` : normalizedValue;
+  }
+  if (normalizedValue.startsWith("uploads/")) {
+    return apiBaseUrl && apiBaseUrl !== "/api" ? `${apiBaseUrl}/${normalizedValue}` : `/${normalizedValue}`;
+  }
   if (normalizedValue.startsWith("/")) return apiBaseUrl ? `${apiBaseUrl}${normalizedValue}` : normalizedValue;
   return normalizedValue;
 };

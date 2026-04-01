@@ -1,6 +1,7 @@
 const safeText = (value) => `${value ?? ""}`.trim();
 const toDigits = (value) => `${value ?? ""}`.replace(/\D+/g, "");
 const ensureArray = (value) => (Array.isArray(value) ? value : value == null ? [] : [value]);
+const apiBaseUrl = `${import.meta.env.VITE_API_URL ?? ""}`.trim().replace(/\/+$/, "");
 
 const getByPath = (source, path = []) =>
   ensureArray(path).reduce(
@@ -19,7 +20,20 @@ const pickFirstDefined = (source, paths = []) => {
 const toObject = (value) => (value && typeof value === "object" ? value : {});
 
 const normalizeImageUrl = (value) => {
-  if (typeof value === "string") return safeText(value);
+  if (typeof value === "string") {
+    const normalizedValue = safeText(value).replace(/\\/g, "/");
+    if (!normalizedValue) return "";
+    if (/^(?:https?:)?\/\//i.test(normalizedValue)) return normalizedValue;
+    if (normalizedValue.startsWith("blob:") || normalizedValue.startsWith("data:")) return normalizedValue;
+    if (normalizedValue.startsWith("/uploads/")) {
+      return apiBaseUrl && apiBaseUrl !== "/api" ? `${apiBaseUrl}${normalizedValue}` : normalizedValue;
+    }
+    if (normalizedValue.startsWith("uploads/")) {
+      return apiBaseUrl && apiBaseUrl !== "/api" ? `${apiBaseUrl}/${normalizedValue}` : `/${normalizedValue}`;
+    }
+    if (normalizedValue.startsWith("/")) return apiBaseUrl ? `${apiBaseUrl}${normalizedValue}` : normalizedValue;
+    return normalizedValue;
+  }
   if (!value || typeof value !== "object") return "";
 
   return safeText(

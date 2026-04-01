@@ -10,6 +10,24 @@ class ApiHttpTransport {
     this.jsonHeaders = { "Content-Type": "application/json" };
   }
 
+  buildRequestUrl(path) {
+    const normalizedBaseUrl = `${this.baseUrl ?? ""}`.replace(/\/+$/, "");
+    const normalizedPath = `${path ?? ""}`;
+
+    if (!normalizedBaseUrl) {
+      return normalizedPath;
+    }
+
+    if (
+      normalizedBaseUrl.endsWith("/api") &&
+      normalizedPath.startsWith("/api/")
+    ) {
+      return `${normalizedBaseUrl}${normalizedPath.slice(4)}`;
+    }
+
+    return `${normalizedBaseUrl}${normalizedPath}`;
+  }
+
   getAuthHeaders(headers = {}) {
     if (typeof window === "undefined") {
       return { ...(headers ?? {}) };
@@ -41,7 +59,7 @@ class ApiHttpTransport {
         ? JSON.stringify(body)
         : undefined;
 
-    const res = await fetch(`${this.baseUrl}${path}`, {
+    const res = await fetch(this.buildRequestUrl(path), {
       method,
       headers: finalHeaders,
       body: finalBody,

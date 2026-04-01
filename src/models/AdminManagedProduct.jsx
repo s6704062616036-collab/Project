@@ -1,3 +1,21 @@
+const safeText = (value) => `${value ?? ""}`.trim();
+const apiBaseUrl = `${import.meta.env.VITE_API_URL ?? ""}`.trim().replace(/\/+$/, "");
+
+const toAbsoluteApiUrl = (value) => {
+  const normalizedValue = safeText(value).replace(/\\/g, "/");
+  if (!normalizedValue) return "";
+  if (/^(?:https?:)?\/\//i.test(normalizedValue)) return normalizedValue;
+  if (normalizedValue.startsWith("blob:") || normalizedValue.startsWith("data:")) return normalizedValue;
+  if (normalizedValue.startsWith("/uploads/")) {
+    return apiBaseUrl && apiBaseUrl !== "/api" ? `${apiBaseUrl}${normalizedValue}` : normalizedValue;
+  }
+  if (normalizedValue.startsWith("uploads/")) {
+    return apiBaseUrl && apiBaseUrl !== "/api" ? `${apiBaseUrl}/${normalizedValue}` : `/${normalizedValue}`;
+  }
+  if (normalizedValue.startsWith("/")) return apiBaseUrl ? `${apiBaseUrl}${normalizedValue}` : normalizedValue;
+  return normalizedValue;
+};
+
 const formatDateTime = (value) => {
   if (!value) return "-";
   const date = new Date(value);
@@ -35,11 +53,11 @@ export class AdminManagedProduct {
     this.price = Number(price) || 0;
     this.exchangeItem = exchangeItem;
     this.status = status;
-    this.imageUrl = imageUrl;
+    this.imageUrl = toAbsoluteApiUrl(imageUrl);
     this.imageCount = Number(imageCount) || 0;
     this.sellerId = sellerId;
     this.sellerName = sellerName;
-    this.sellerAvatarUrl = sellerAvatarUrl;
+    this.sellerAvatarUrl = toAbsoluteApiUrl(sellerAvatarUrl);
     this.shopId = shopId;
     this.shopName = shopName;
     this.kycStatus = kycStatus;

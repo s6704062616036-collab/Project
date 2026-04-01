@@ -1,6 +1,22 @@
 import { ChatMessage } from "./ChatMessage";
 
 const safeText = (value) => `${value ?? ""}`.trim();
+const apiBaseUrl = `${import.meta.env.VITE_API_URL ?? ""}`.trim().replace(/\/+$/, "");
+
+const toAbsoluteApiUrl = (value) => {
+  const normalizedValue = safeText(value).replace(/\\/g, "/");
+  if (!normalizedValue) return "";
+  if (/^(?:https?:)?\/\//i.test(normalizedValue)) return normalizedValue;
+  if (normalizedValue.startsWith("blob:") || normalizedValue.startsWith("data:")) return normalizedValue;
+  if (normalizedValue.startsWith("/uploads/")) {
+    return apiBaseUrl && apiBaseUrl !== "/api" ? `${apiBaseUrl}${normalizedValue}` : normalizedValue;
+  }
+  if (normalizedValue.startsWith("uploads/")) {
+    return apiBaseUrl && apiBaseUrl !== "/api" ? `${apiBaseUrl}/${normalizedValue}` : `/${normalizedValue}`;
+  }
+  if (normalizedValue.startsWith("/")) return apiBaseUrl ? `${apiBaseUrl}${normalizedValue}` : normalizedValue;
+  return normalizedValue;
+};
 
 const toIsoString = (value) => {
   const date = new Date(value ?? "");
@@ -33,10 +49,10 @@ export class ChatRoom {
     this.buyerId = buyerId ?? "";
     this.sellerId = sellerId ?? "";
     this.sellerName = sellerName ?? "";
-    this.sellerAvatarUrl = sellerAvatarUrl ?? "";
+    this.sellerAvatarUrl = toAbsoluteApiUrl(sellerAvatarUrl);
     this.counterpartId = counterpartId ?? "";
     this.counterpartName = counterpartName ?? "";
-    this.counterpartAvatarUrl = counterpartAvatarUrl ?? "";
+    this.counterpartAvatarUrl = toAbsoluteApiUrl(counterpartAvatarUrl);
     this.unreadCount = Number.isFinite(Number(unreadCount)) ? Math.max(0, Number(unreadCount)) : 0;
     this.lastMessage = lastMessage instanceof ChatMessage ? lastMessage : ChatMessage.fromJSON(lastMessage);
     this.createdAt = toIsoString(createdAt);

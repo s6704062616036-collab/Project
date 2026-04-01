@@ -1,4 +1,20 @@
 const safeText = (value) => `${value ?? ""}`.trim();
+const apiBaseUrl = `${import.meta.env.VITE_API_URL ?? ""}`.trim().replace(/\/+$/, "");
+
+const toAbsoluteApiUrl = (value) => {
+  const normalizedValue = safeText(value).replace(/\\/g, "/");
+  if (!normalizedValue) return "";
+  if (/^(?:https?:)?\/\//i.test(normalizedValue)) return normalizedValue;
+  if (normalizedValue.startsWith("blob:") || normalizedValue.startsWith("data:")) return normalizedValue;
+  if (normalizedValue.startsWith("/uploads/")) {
+    return apiBaseUrl && apiBaseUrl !== "/api" ? `${apiBaseUrl}${normalizedValue}` : normalizedValue;
+  }
+  if (normalizedValue.startsWith("uploads/")) {
+    return apiBaseUrl && apiBaseUrl !== "/api" ? `${apiBaseUrl}/${normalizedValue}` : `/${normalizedValue}`;
+  }
+  if (normalizedValue.startsWith("/")) return apiBaseUrl ? `${apiBaseUrl}${normalizedValue}` : normalizedValue;
+  return normalizedValue;
+};
 
 const toIsoString = (value) => {
   const date = new Date(value ?? "");
@@ -25,12 +41,12 @@ export class ChatMessage {
     this.chatId = chatId ?? "";
     this.senderId = senderId ?? "";
     this.senderName = senderName ?? "";
-    this.senderAvatarUrl = senderAvatarUrl ?? "";
+    this.senderAvatarUrl = toAbsoluteApiUrl(senderAvatarUrl);
     this.type = type ?? "text";
     this.orderId = orderId ?? "";
     this.text = text ?? "";
-    this.imageUrl = imageUrl ?? "";
-    this.videoUrl = videoUrl ?? "";
+    this.imageUrl = toAbsoluteApiUrl(imageUrl);
+    this.videoUrl = toAbsoluteApiUrl(videoUrl);
     this.meetupProposal = meetupProposal
       ? {
           location: safeText(meetupProposal.location),

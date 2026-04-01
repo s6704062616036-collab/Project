@@ -10,17 +10,70 @@ const getAvatarFallback = (name) => {
   return normalized.charAt(0).toUpperCase();
 };
 
-const ChatAvatar = ({ src, name, sizeClass = "h-10 w-10", textClass = "text-sm" }) => (
-  <div
-    className={`${sizeClass} shrink-0 overflow-hidden rounded-full bg-zinc-200 ring-1 ring-zinc-200 grid place-items-center font-semibold text-zinc-600 ${textClass}`}
-  >
-    {safeText(src) ? (
-      <img src={src} alt={safeText(name) || "avatar"} className="h-full w-full object-cover" />
-    ) : (
-      <span>{getAvatarFallback(name)}</span>
-    )}
-  </div>
-);
+const ChatAvatar = ({ src, name, sizeClass = "h-10 w-10", textClass = "text-sm" }) => {
+  const normalizedSrc = safeText(src);
+  const [imageFailed, setImageFailed] = React.useState(false);
+
+  React.useEffect(() => {
+    setImageFailed(false);
+  }, [normalizedSrc]);
+
+  return (
+    <div
+      className={`${sizeClass} shrink-0 overflow-hidden rounded-full bg-zinc-200 ring-1 ring-zinc-200 grid place-items-center font-semibold text-zinc-600 ${textClass}`}
+    >
+      {normalizedSrc && !imageFailed ? (
+        <img
+          src={normalizedSrc}
+          alt={safeText(name) || "avatar"}
+          className="h-full w-full object-cover"
+          onError={() => setImageFailed(true)}
+        />
+      ) : (
+        <span>{getAvatarFallback(name)}</span>
+      )}
+    </div>
+  );
+};
+
+const ChatMediaImage = ({ src, alt, onOpenImage }) => {
+  const normalizedSrc = safeText(src);
+  const [imageFailed, setImageFailed] = React.useState(false);
+
+  React.useEffect(() => {
+    setImageFailed(false);
+  }, [normalizedSrc]);
+
+  if (!normalizedSrc || imageFailed) {
+    return (
+      <div className="grid min-h-40 place-items-center rounded-xl border border-zinc-200 bg-zinc-100 px-4 py-6 text-center text-xs text-zinc-500">
+        ไม่สามารถแสดงรูปภาพนี้ได้
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl overflow-hidden border border-black/10 bg-black/5">
+      <button
+        type="button"
+        className="block w-full cursor-zoom-in"
+        onClick={() =>
+          onOpenImage?.({
+            imageUrl: normalizedSrc,
+            alt,
+          })
+        }
+      >
+        <img
+          src={normalizedSrc}
+          alt={alt || "chat-image"}
+          className="max-h-72 w-full object-contain bg-white"
+          onError={() => setImageFailed(true)}
+        />
+      </button>
+    </div>
+  );
+};
 
 export class ChatPage extends React.Component {
   state = {
@@ -706,7 +759,7 @@ class MessageBubble extends React.Component {
     return (
       <div className={`flex items-end gap-2 ${mine ? "justify-end" : "justify-start"}`}>
         {!mine ? <ChatAvatar src={avatarUrl} name={avatarName} sizeClass="h-9 w-9" textClass="text-xs" /> : null}
-        <div className={`max-w-[75%] rounded-2xl border px-3 py-2 space-y-2 ${bubbleClass}`}>
+        <div className={`min-w-0 max-w-[min(78%,34rem)] rounded-2xl border px-3 py-2 space-y-2 ${bubbleClass}`}>
           {!mine ? <div className="text-[11px] font-semibold">{message.senderName || "ผู้ใช้"}</div> : null}
           {message.hasVideo() ? (
             <div className="rounded-xl overflow-hidden border border-black/10 bg-black/5">
@@ -714,30 +767,20 @@ class MessageBubble extends React.Component {
                 src={message.videoUrl}
                 controls
                 preload="metadata"
-                className="max-h-72 w-full bg-black object-contain"
+                className="max-h-72 w-full rounded-xl bg-black object-contain"
               />
             </div>
           ) : null}
           {message.hasImage() ? (
-            <div className="rounded-xl overflow-hidden border border-black/10 bg-black/5">
-              <button
-                type="button"
-                className="block w-full cursor-zoom-in"
-                onClick={() =>
-                  onOpenImage?.({
-                    imageUrl: message.imageUrl,
-                    alt: message.senderName || "chat-image",
-                  })
-                }
-              >
-                <img src={message.imageUrl} alt="chat-image" className="max-h-64 w-full object-cover" />
-              </button>
-            </div>
+            <ChatMediaImage
+              src={message.imageUrl}
+              alt={message.senderName || "chat-image"}
+              onOpenImage={onOpenImage}
+            />
           ) : null}
           {message.hasText() ? <div className="text-sm whitespace-pre-wrap break-words">{message.text}</div> : null}
           <div className={`text-[10px] ${mine ? "text-zinc-300" : "text-zinc-500"}`}>{message.getTimeLabel()}</div>
         </div>
-        {mine ? <ChatAvatar src={avatarUrl} name={avatarName} sizeClass="h-9 w-9" textClass="text-xs" /> : null}
       </div>
     );
   }
