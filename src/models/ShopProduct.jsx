@@ -27,6 +27,7 @@ export class ShopProduct {
     ownerId,
     shopId,
     shopName,
+    province,
     shopAvatarUrl,
     name,
     category,
@@ -49,6 +50,7 @@ export class ShopProduct {
     this.ownerId = ownerId ?? "";
     this.shopId = shopId ?? "";
     this.shopName = shopName ?? "";
+    this.province = ShopProduct.normalizeProvince(province);
     this.shopAvatarUrl = toAbsoluteApiUrl(shopAvatarUrl);
     this.name = name ?? "";
     this.category = ProductCategory.normalize(category);
@@ -84,6 +86,10 @@ export class ShopProduct {
     }
 
     return normalized;
+  }
+
+  static normalizeProvince(value) {
+    return `${value ?? ""}`.trim().slice(0, 100);
   }
 
   static empty() {
@@ -125,6 +131,12 @@ export class ShopProduct {
         json?.shopProfile?.shopName ??
         json?.shop?.name ??
         json?.seller?.shopName,
+      province:
+        json?.province ??
+        json?.shop?.province ??
+        json?.shopProfile?.province ??
+        json?.seller?.province ??
+        json?.shopProvince,
       shopAvatarUrl:
         json?.shopAvatarUrl ??
         json?.shop?.avatarUrl ??
@@ -181,6 +193,10 @@ export class ShopProduct {
 
   getShopDisplayName() {
     return `${this.shopName ?? ""}`.trim() || "ร้านค้าผู้ขาย";
+  }
+
+  getProvinceLabel() {
+    return ShopProduct.normalizeProvince(this.province);
   }
 
   isSold() {

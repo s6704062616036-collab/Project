@@ -10,15 +10,21 @@ export class AdminDashboardSummary {
     this.successfulExchangesCount = toNumber(successfulExchangesCount, 0);
     this.pendingKycCount = toNumber(pendingKycCount, 0);
     this.openReportsCount = toNumber(openReportsCount, 0);
+
+    this.newUsers = this.newMembersCount;
+    this.activeProducts = this.productAnnouncementsCount;
+    this.completedOrders = this.successfulExchangesCount;
+    this.pendingKyc = this.pendingKycCount;
+    this.openReports = this.openReportsCount;
   }
 
   static fromJSON(json) {
     return new AdminDashboardSummary({
-      newMembersCount: json?.newMembersCount,
-      productAnnouncementsCount: json?.productAnnouncementsCount,
-      successfulExchangesCount: json?.successfulExchangesCount,
-      pendingKycCount: json?.pendingKycCount,
-      openReportsCount: json?.openReportsCount,
+      newMembersCount: json?.newMembersCount ?? json?.newUsers,
+      productAnnouncementsCount: json?.productAnnouncementsCount ?? json?.activeProducts,
+      successfulExchangesCount: json?.successfulExchangesCount ?? json?.completedOrders,
+      pendingKycCount: json?.pendingKycCount ?? json?.pendingKyc,
+      openReportsCount: json?.openReportsCount ?? json?.openReports,
     });
   }
 }

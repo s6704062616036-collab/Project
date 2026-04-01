@@ -47,6 +47,8 @@ const normalizeBirthDate = (value) => {
   return /^\d{4}-\d{2}-\d{2}$/.test(normalizedValue) ? normalizedValue : "";
 };
 
+const normalizeProvince = (value) => safeText(value).slice(0, 100);
+
 const normalizePendingSubmission = (input = {}) => {
   if (!input || typeof input !== "object") return null;
 
@@ -55,6 +57,7 @@ const normalizePendingSubmission = (input = {}) => {
     description: safeText(input.description),
     citizenId: toDigits(input.citizenId).slice(0, 13),
     birthDate: normalizeBirthDate(input.birthDate),
+    province: normalizeProvince(input.province),
     parcelQrCodeUrl: normalizeImageUrl(
       input.parcelQrCodeUrl ??
         input.paymentQrCodeUrl ??
@@ -77,6 +80,7 @@ export class ShopProfile {
     phone,
     citizenId,
     birthDate,
+    province,
     avatarUrl,
     parcelQrCodeUrl,
     bankName,
@@ -99,6 +103,7 @@ export class ShopProfile {
     this.phone = phone ?? "";
     this.citizenId = ShopProfile.normalizeCitizenId(citizenId);
     this.birthDate = normalizeBirthDate(birthDate);
+    this.province = normalizeProvince(province);
     this.avatarUrl = normalizeImageUrl(avatarUrl);
     this.parcelQrCodeUrl = normalizeImageUrl(parcelQrCodeUrl);
     this.bankName = `${bankName ?? ""}`;
@@ -128,6 +133,7 @@ export class ShopProfile {
       phone: json?.phone,
       citizenId: json?.citizenId,
       birthDate: json?.birthDate,
+      province: json?.province ?? json?.shopProvince ?? json?.locationProvince,
       avatarUrl: json?.avatarUrl,
       parcelQrCodeUrl:
         json?.parcelQrCodeUrl ?? json?.paymentQrCodeUrl ?? json?.parcelPaymentQrCodeUrl ?? json?.qrCodeUrl,
@@ -163,6 +169,10 @@ export class ShopProfile {
         patch && Object.prototype.hasOwnProperty.call(patch, "birthDate")
           ? patch.birthDate
           : this.birthDate,
+      province:
+        patch && Object.prototype.hasOwnProperty.call(patch, "province")
+          ? patch.province
+          : this.province,
       pendingSubmission:
         patch && Object.prototype.hasOwnProperty.call(patch, "pendingSubmission")
           ? normalizePendingSubmission(patch.pendingSubmission)
@@ -237,6 +247,7 @@ export class ShopProfile {
       description: this.pendingSubmission.description ?? "",
       citizenId: this.pendingSubmission.citizenId ?? "",
       birthDate: this.pendingSubmission.birthDate ?? this.birthDate ?? "",
+      province: this.pendingSubmission.province ?? this.province ?? "",
       parcelQrCodeUrl: this.pendingSubmission.parcelQrCodeUrl ?? "",
       bankName: safeText(this.bankName),
       bankAccountName: safeText(this.bankAccountName),
@@ -266,6 +277,7 @@ export class ShopProfile {
       description: this.description,
       citizenId: this.citizenId,
       birthDate: this.birthDate,
+      province: this.province,
       avatarUrl: this.avatarUrl,
       parcelQrCodeUrl: this.parcelQrCodeUrl,
       bankName: this.bankName,

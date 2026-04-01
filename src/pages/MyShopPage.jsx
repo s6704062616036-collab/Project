@@ -27,6 +27,87 @@ const BANK_OPTIONS = [
   "พร้อมเพย์ (PromptPay)",
 ];
 
+const PROVINCE_OPTIONS = [
+  "",
+  "กรุงเทพมหานคร",
+  "กระบี่",
+  "กาญจนบุรี",
+  "กาฬสินธุ์",
+  "กำแพงเพชร",
+  "ขอนแก่น",
+  "จันทบุรี",
+  "ฉะเชิงเทรา",
+  "ชลบุรี",
+  "ชัยนาท",
+  "ชัยภูมิ",
+  "ชุมพร",
+  "เชียงราย",
+  "เชียงใหม่",
+  "ตรัง",
+  "ตราด",
+  "ตาก",
+  "นครนายก",
+  "นครปฐม",
+  "นครพนม",
+  "นครราชสีมา",
+  "นครศรีธรรมราช",
+  "นครสวรรค์",
+  "นนทบุรี",
+  "นราธิวาส",
+  "น่าน",
+  "บึงกาฬ",
+  "บุรีรัมย์",
+  "ปทุมธานี",
+  "ประจวบคีรีขันธ์",
+  "ปราจีนบุรี",
+  "ปัตตานี",
+  "พระนครศรีอยุธยา",
+  "พังงา",
+  "พัทลุง",
+  "พิจิตร",
+  "พิษณุโลก",
+  "เพชรบุรี",
+  "เพชรบูรณ์",
+  "แพร่",
+  "พะเยา",
+  "ภูเก็ต",
+  "มหาสารคาม",
+  "มุกดาหาร",
+  "แม่ฮ่องสอน",
+  "ยะลา",
+  "ยโสธร",
+  "ร้อยเอ็ด",
+  "ระนอง",
+  "ระยอง",
+  "ราชบุรี",
+  "ลพบุรี",
+  "ลำปาง",
+  "ลำพูน",
+  "เลย",
+  "ศรีสะเกษ",
+  "สกลนคร",
+  "สงขลา",
+  "สตูล",
+  "สมุทรปราการ",
+  "สมุทรสงคราม",
+  "สมุทรสาคร",
+  "สระแก้ว",
+  "สระบุรี",
+  "สิงห์บุรี",
+  "สุโขทัย",
+  "สุพรรณบุรี",
+  "สุราษฎร์ธานี",
+  "สุรินทร์",
+  "หนองคาย",
+  "หนองบัวลำภู",
+  "อ่างทอง",
+  "อุดรธานี",
+  "อุทัยธานี",
+  "อุตรดิตถ์",
+  "อุบลราชธานี",
+  "อำนาจเจริญ",
+];
+
 const ADMIN_CONTACT_EMAIL = "s6704062616045@email.kmutnb.ac.th";
 
 export class MyShopPage extends React.Component {
@@ -1130,6 +1211,9 @@ class ShopSettingsCard extends React.Component {
     const bankOptions = BANK_OPTIONS.includes(shopDraft?.bankName ?? "")
       ? BANK_OPTIONS
       : [...BANK_OPTIONS, shopDraft?.bankName ?? ""].filter(Boolean);
+    const provinceOptions = PROVINCE_OPTIONS.includes(shopDraft?.province ?? "")
+      ? PROVINCE_OPTIONS
+      : [...PROVINCE_OPTIONS, shopDraft?.province ?? ""].filter(Boolean);
     const actionLabel = canDirectSave
       ? "บันทึกข้อมูลร้าน"
       : shopMeta?.hasPendingSubmission?.()
@@ -1208,6 +1292,26 @@ class ShopSettingsCard extends React.Component {
 
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <label className="space-y-1">
+              <div className="text-sm text-zinc-600">จังหวัด</div>
+              <select
+                className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none"
+                value={shopDraft?.province ?? ""}
+                onChange={(e) => onChangeField?.("province", e.target.value)}
+              >
+                <option value="">-- เลือกจังหวัด --</option>
+                {provinceOptions
+                  .filter((option) => option)
+                  .map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+              </select>
+              <div className="text-xs text-zinc-500">
+                ใช้แสดงตำแหน่งคร่าวๆ บนหน้าสินค้าเพื่อช่วยตัดสินใจนัดรับหรือแลกเปลี่ยน
+              </div>
+            </label>
             <label className="space-y-1">
               <div className="text-sm text-zinc-600">ชื่อร้าน</div>
               <input
@@ -1548,6 +1652,8 @@ class CreateProductModal extends React.Component {
               <div className="text-sm text-zinc-600">คำอธิบายสินค้า</div>
               <textarea
                 className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none min-h-28"
+                required
+                placeholder="กรอกรายละเอียดสินค้า"
                 value={draftProduct.description}
                 onChange={(e) => onChangeField?.("description", e.target.value)}
               />
@@ -1715,6 +1821,8 @@ class EditProductModal extends React.Component {
               <div className="text-sm text-zinc-600">คำอธิบายสินค้า</div>
               <textarea
                 className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none min-h-28"
+                required
+                placeholder="กรอกรายละเอียดสินค้า"
                 value={draftProduct.description}
                 onChange={(e) => onChangeField?.("description", e.target.value)}
               />

@@ -38,6 +38,7 @@ const getStatusBadgeClassName = (status) => {
 export class MyOrdersPage extends React.Component {
   state = {
     loading: true,
+    backgroundRefreshing: false,
     error: "",
     done: "",
     orders: [],
@@ -49,6 +50,7 @@ export class MyOrdersPage extends React.Component {
   realtimeSync = new RealtimeSyncManager({
     onRefresh: () => this.refreshOrders(),
     databasePollIntervalMs: 5000,
+    databasePollingEnabled: false,
   });
   realtimeRefreshInFlight = false;
   pendingRealtimeRefresh = false;
@@ -62,11 +64,16 @@ export class MyOrdersPage extends React.Component {
     this.realtimeSync.stop();
   }
 
+  fetchOrders = async () => {
+    const { orders } = await this.orderService.listMyOrders();
+    return orders ?? [];
+  };
+
   loadOrders = async () => {
     this.setState({ loading: true, error: "" });
     try {
-      const { orders } = await this.orderService.listMyOrders();
-      this.setState({ orders: orders ?? [] });
+      const orders = await this.fetchOrders();
+      this.setState({ orders });
     } catch (e) {
       this.setState({ error: e?.message ?? "โหลดข้อมูลการสั่งซื้อไม่สำเร็จ" });
     } finally {
@@ -94,10 +101,15 @@ export class MyOrdersPage extends React.Component {
     }
 
     this.realtimeRefreshInFlight = true;
+    this.setState({ backgroundRefreshing: true });
     try {
-      await this.loadOrders();
+      const orders = await this.fetchOrders();
+      this.setState({ orders });
+    } catch (e) {
+      this.setState({ error: e?.message ?? "à¸£à¸µà¹€à¸Ÿà¸£à¸Šà¸„à¸³à¸ªà¸±à¹ˆà¸‡à¸‹à¸·à¹‰à¸­à¹„à¸¡à¹ˆà¸ªà¸³à¹€à¸£à¹‡à¸ˆ" });
     } finally {
       this.realtimeRefreshInFlight = false;
+      this.setState({ backgroundRefreshing: false });
     }
 
     if (this.pendingRealtimeRefresh) {
@@ -162,7 +174,7 @@ export class MyOrdersPage extends React.Component {
 
   render() {
     const { user } = this.props;
-    const { loading, error, done, orders, showProfilePopup, actionLoadingKey } = this.state;
+    const { loading, backgroundRefreshing, error, done, orders, showProfilePopup, actionLoadingKey } = this.state;
     const chatUnreadCount = Number(this.props.chatUnreadCount ?? 0) || 0;
     const notificationUnreadCount = Number(this.props.notificationUnreadCount ?? 0) || 0;
 
@@ -235,6 +247,9 @@ export class MyOrdersPage extends React.Component {
               <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">
                 {done}
               </div>
+            ) : null}
+            {!loading && backgroundRefreshing ? (
+              <div className="text-xs text-zinc-400">กำลังซิงก์ข้อมูลล่าสุด...</div>
             ) : null}
 
             {!loading && !error && !orders.length ? (

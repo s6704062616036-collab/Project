@@ -777,6 +777,11 @@ export class ProductDetailPage extends React.Component {
                     {product?.getSaleStatusLabel?.() ?? "พร้อมขาย"}
                   </div>
                   <div className="text-2xl font-semibold text-zinc-900">{product?.getPriceLabel?.() ?? "฿0.00"}</div>
+                  {product?.getProvinceLabel?.() ? (
+                    <div className="inline-flex w-fit rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-700">
+                      จังหวัด: {product.getProvinceLabel()}
+                    </div>
+                  ) : null}
                   <button
                     type="button"
                     className="app-seller-card flex w-full max-w-md items-center gap-3 rounded-2xl p-3 text-left transition hover:border-zinc-300 hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"

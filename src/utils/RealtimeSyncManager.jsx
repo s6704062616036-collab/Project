@@ -9,6 +9,7 @@ export class RealtimeSyncManager {
     mockStorageKey = DEFAULT_MOCK_STORAGE_KEY,
     mockUpdatedEvent = DEFAULT_MOCK_UPDATED_EVENT,
     databasePollIntervalMs = 5000,
+    databasePollingEnabled = true,
   } = {}) {
     this.onRefresh = typeof onRefresh === "function" ? onRefresh : () => {};
     this.mockStorageKey = mockStorageKey;
@@ -16,6 +17,7 @@ export class RealtimeSyncManager {
     this.databasePollIntervalMs = Number.isFinite(Number(databasePollIntervalMs))
       ? Math.max(1000, Number(databasePollIntervalMs))
       : 5000;
+    this.databasePollingEnabled = databasePollingEnabled !== false;
     this.unsubscribeDataMode = null;
     this.pollingTimerId = null;
     this.started = false;
@@ -64,7 +66,7 @@ export class RealtimeSyncManager {
   }
 
   startPolling() {
-    if (typeof window === "undefined" || this.pollingTimerId) return;
+    if (typeof window === "undefined" || this.pollingTimerId || !this.databasePollingEnabled) return;
     this.pollingTimerId = window.setInterval(() => {
       if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
       this.onRefresh();
