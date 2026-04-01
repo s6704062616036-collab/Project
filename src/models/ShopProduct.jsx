@@ -21,6 +21,10 @@ const toAbsoluteApiUrl = (value) => {
 export class ShopProduct {
   static AVAILABLE = ProductSaleLifecycle.AVAILABLE;
   static SOLD = ProductSaleLifecycle.SOLD;
+  static MAX_NAME_LENGTH = 80;
+  static MAX_EXCHANGE_ITEM_LENGTH = 160;
+  static MAX_DESCRIPTION_LENGTH = 1000;
+  static MAX_PRICE = 99999999;
 
   constructor({
     id,
@@ -219,8 +223,20 @@ export class ShopProduct {
         : [];
 
     if (!this.name.trim()) return "กรุณากรอกชื่อสินค้า";
+    if (this.name.trim().length > ShopProduct.MAX_NAME_LENGTH) {
+      return `ชื่อสินค้าต้องไม่เกิน ${ShopProduct.MAX_NAME_LENGTH} ตัวอักษร`;
+    }
     if (!ProductCategory.isValid(this.category)) return "กรุณาเลือกหมวดหมู่สินค้า";
     if (this.getPriceNumber() <= 0) return "กรุณากรอกราคาสินค้าให้มากกว่า 0";
+    if (this.getPriceNumber() > ShopProduct.MAX_PRICE) {
+      return `ราคาสินค้าต้องไม่เกิน ${new Intl.NumberFormat("th-TH").format(ShopProduct.MAX_PRICE)} บาท`;
+    }
+    if (this.exchangeItem.trim().length > ShopProduct.MAX_EXCHANGE_ITEM_LENGTH) {
+      return `ของที่ต้องการแลกต้องไม่เกิน ${ShopProduct.MAX_EXCHANGE_ITEM_LENGTH} ตัวอักษร`;
+    }
+    if (this.description.trim().length > ShopProduct.MAX_DESCRIPTION_LENGTH) {
+      return `คำอธิบายสินค้าต้องไม่เกิน ${ShopProduct.MAX_DESCRIPTION_LENGTH} ตัวอักษร`;
+    }
     if (!selectedFiles.length && !this.getImageUrls().length) return "กรุณาอัปโหลดรูปภาพสินค้า";
     if (selectedFiles.length > 4) return "อัปโหลดรูปสินค้าได้สูงสุด 4 รูป";
     return "";

@@ -757,7 +757,7 @@ export class ProductDetailPage extends React.Component {
 
                 <div className="space-y-3">
                   <div className="flex items-start justify-between gap-3">
-                    <div className="text-2xl font-semibold text-zinc-900 break-words">
+                    <div className="min-w-0 flex-1 text-2xl font-semibold text-zinc-900 break-words [overflow-wrap:anywhere]">
                       {product?.name || "ไม่ระบุชื่อสินค้า"}
                     </div>
                     <button
@@ -776,7 +776,9 @@ export class ProductDetailPage extends React.Component {
                   >
                     {product?.getSaleStatusLabel?.() ?? "พร้อมขาย"}
                   </div>
-                  <div className="text-2xl font-semibold text-zinc-900">{product?.getPriceLabel?.() ?? "฿0.00"}</div>
+                  <div className="text-2xl font-semibold leading-tight text-zinc-900 break-words [overflow-wrap:anywhere]">
+                    {product?.getPriceLabel?.() ?? "฿0.00"}
+                  </div>
                   {product?.getProvinceLabel?.() ? (
                     <div className="inline-flex w-fit rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-700">
                       จังหวัด: {product.getProvinceLabel()}
@@ -814,8 +816,8 @@ export class ProductDetailPage extends React.Component {
                     </div>
                   </button>
                   {exchangeItem ? (
-                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-zinc-700 break-words">
-                      ต้องการแลกกับ: <span className="font-medium text-zinc-900">{exchangeItem}</span>
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-zinc-700 break-words [overflow-wrap:anywhere]">
+                      ต้องการแลกกับ: <span className="font-medium text-zinc-900 break-words [overflow-wrap:anywhere]">{exchangeItem}</span>
                     </div>
                   ) : null}
 

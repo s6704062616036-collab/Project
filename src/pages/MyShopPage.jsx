@@ -1088,12 +1088,12 @@ export class MyShopPage extends React.Component {
               <NotificationBellButton
                 count={this.props.notificationUnreadCount}
                 onClick={() => this.props.onGoNotifications?.()}
-                className="h-10 w-10 rounded-xl bg-[#F4D03E] border border-zinc-200 grid place-items-center"
+                className="app-icon-button relative grid h-10 w-10 place-items-center rounded-full"
               />
 
               <button
                 type="button"
-                className="h-10 w-10 rounded-xl bg-[#F4D03E] border border-zinc-200 grid place-items-center"
+                className="app-icon-button relative grid h-10 w-10 place-items-center rounded-full"
                 onClick={() => this.props.onGoChat?.()}
                 title="แชท"
               >
@@ -1102,7 +1102,7 @@ export class MyShopPage extends React.Component {
 
               <button
                 type="button"
-                className="h-10 w-10 rounded-xl bg-[#F4D03E] text-white grid place-items-center"
+                className="app-icon-button relative grid h-10 w-10 place-items-center rounded-full"
                 onClick={this.openProfilePopup}
                 title="บัญชี"
               >
@@ -1654,9 +1654,11 @@ class CreateProductModal extends React.Component {
               <div className="text-sm text-zinc-600">ชื่อสินค้า</div>
               <input
                 className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none"
+                maxLength={ShopProduct.MAX_NAME_LENGTH}
                 value={draftProduct.name}
                 onChange={(e) => onChangeField?.("name", e.target.value)}
               />
+              <div className="text-xs text-zinc-400">ไม่เกิน {ShopProduct.MAX_NAME_LENGTH} ตัวอักษร</div>
             </label>
 
             <label className="space-y-1">
@@ -1680,21 +1682,25 @@ class CreateProductModal extends React.Component {
               <input
                 type="number"
                 min="0"
+                max={ShopProduct.MAX_PRICE}
                 step="0.01"
                 className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none"
                 value={draftProduct.price}
                 onChange={(e) => onChangeField?.("price", e.target.value)}
               />
+              <div className="text-xs text-zinc-400">ไม่เกิน {new Intl.NumberFormat("th-TH").format(ShopProduct.MAX_PRICE)} บาท</div>
             </label>
 
             <label className="space-y-1">
               <div className="text-sm text-zinc-600">ของที่ต้องการแลกเปลี่ยน (ไม่บังคับ)</div>
               <input
                 className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none"
+                maxLength={ShopProduct.MAX_EXCHANGE_ITEM_LENGTH}
                 placeholder="เช่น หนังสือการ์ตูน, ต้นไม้, อุปกรณ์ไอที"
                 value={draftProduct.exchangeItem}
                 onChange={(e) => onChangeField?.("exchangeItem", e.target.value)}
               />
+              <div className="text-xs text-zinc-400">ไม่เกิน {ShopProduct.MAX_EXCHANGE_ITEM_LENGTH} ตัวอักษร</div>
             </label>
 
             <label className="space-y-1 md:col-span-2">
@@ -1738,10 +1744,12 @@ class CreateProductModal extends React.Component {
               <textarea
                 className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none min-h-28"
                 required
+                maxLength={ShopProduct.MAX_DESCRIPTION_LENGTH}
                 placeholder="กรอกรายละเอียดสินค้า"
                 value={draftProduct.description}
                 onChange={(e) => onChangeField?.("description", e.target.value)}
               />
+              <div className="text-xs text-zinc-400">ไม่เกิน {ShopProduct.MAX_DESCRIPTION_LENGTH} ตัวอักษร</div>
             </label>
           </div>
 
@@ -1820,9 +1828,11 @@ class EditProductModal extends React.Component {
               <div className="text-sm text-zinc-600">ชื่อสินค้า</div>
               <input
                 className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none"
+                maxLength={ShopProduct.MAX_NAME_LENGTH}
                 value={draftProduct.name}
                 onChange={(e) => onChangeField?.("name", e.target.value)}
               />
+              <div className="text-xs text-zinc-400">ไม่เกิน {ShopProduct.MAX_NAME_LENGTH} ตัวอักษร</div>
             </label>
 
             <label className="space-y-1">
@@ -1846,21 +1856,25 @@ class EditProductModal extends React.Component {
               <input
                 type="number"
                 min="0"
+                max={ShopProduct.MAX_PRICE}
                 step="0.01"
                 className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none"
                 value={draftProduct.price}
                 onChange={(e) => onChangeField?.("price", e.target.value)}
               />
+              <div className="text-xs text-zinc-400">ไม่เกิน {new Intl.NumberFormat("th-TH").format(ShopProduct.MAX_PRICE)} บาท</div>
             </label>
 
             <label className="space-y-1">
               <div className="text-sm text-zinc-600">ของที่ต้องการแลกเปลี่ยน (ไม่บังคับ)</div>
               <input
                 className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none"
+                maxLength={ShopProduct.MAX_EXCHANGE_ITEM_LENGTH}
                 placeholder="เช่น หนังสือการ์ตูน, ต้นไม้, อุปกรณ์ไอที"
                 value={draftProduct.exchangeItem}
                 onChange={(e) => onChangeField?.("exchangeItem", e.target.value)}
               />
+              <div className="text-xs text-zinc-400">ไม่เกิน {ShopProduct.MAX_EXCHANGE_ITEM_LENGTH} ตัวอักษร</div>
             </label>
 
             <label className="space-y-1 md:col-span-2">
@@ -1917,10 +1931,12 @@ class EditProductModal extends React.Component {
               <textarea
                 className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none min-h-28"
                 required
+                maxLength={ShopProduct.MAX_DESCRIPTION_LENGTH}
                 placeholder="กรอกรายละเอียดสินค้า"
                 value={draftProduct.description}
                 onChange={(e) => onChangeField?.("description", e.target.value)}
               />
+              <div className="text-xs text-zinc-400">ไม่เกิน {ShopProduct.MAX_DESCRIPTION_LENGTH} ตัวอักษร</div>
             </label>
           </div>
 
