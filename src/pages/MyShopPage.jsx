@@ -1714,7 +1714,7 @@ class CreateProductModal extends React.Component {
                       <img src={previewUrl} alt={`preview-${index + 1}`} className="h-full w-full object-cover" />
                       <button
                         type="button"
-                        className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full border border-white/70 bg-rose-500 text-base font-semibold leading-none text-white shadow-md hover:bg-rose-600"
+                        className="absolute right-2 top-2 z-10 grid h-10 w-10 place-items-center rounded-full border-2 border-white bg-rose-500 text-lg font-bold leading-none text-white shadow-lg ring-1 ring-rose-200 transition hover:scale-105 hover:bg-rose-600"
                         onClick={() => onRemoveImageAt?.(index)}
                         title="ลบรูปนี้"
                       >
@@ -1893,7 +1893,7 @@ class EditProductModal extends React.Component {
                       <img src={previewUrl} alt={`preview-edit-${index + 1}`} className="h-full w-full object-cover" />
                       <button
                         type="button"
-                        className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full border border-white/70 bg-rose-500 text-base font-semibold leading-none text-white shadow-md hover:bg-rose-600"
+                        className="absolute right-2 top-2 z-10 grid h-10 w-10 place-items-center rounded-full border-2 border-white bg-rose-500 text-lg font-bold leading-none text-white shadow-lg ring-1 ring-rose-200 transition hover:scale-105 hover:bg-rose-600"
                         onClick={() => onRemoveImageAt?.(index)}
                         title="ลบรูปนี้"
                       >
