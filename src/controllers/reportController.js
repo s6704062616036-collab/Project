@@ -168,10 +168,35 @@ const submitShopReport = async (req, res) => {
 const listReports = async (req, res) => {
   try {
     const reports = await Report.find({}).sort({ createdAt: -1 }).lean();
+    const productIds = [...new Set(reports.map((report) => `${report?.productId ?? ""}`).filter(Boolean))];
+    const shopIds = [...new Set(reports.map((report) => `${report?.shopId ?? ""}`).filter(Boolean))];
+
+    const [products, shops] = await Promise.all([
+      productIds.length ? Product.find({ _id: { $in: productIds } }).lean() : [],
+      shopIds.length ? Shop.find({ _id: { $in: shopIds } }).lean() : [],
+    ]);
+
+    const productsById = new Map(products.map((product) => [product._id.toString(), product]));
+    const shopsById = new Map(shops.map((shop) => [shop._id.toString(), shop]));
+    const enrichedReports = reports.map((report) => {
+      const product = productsById.get(`${report?.productId ?? ""}`) ?? null;
+      const shop = shopsById.get(`${report?.shopId ?? ""}`) ?? null;
+
+      return {
+        ...report,
+        productName: report?.productName || product?.title || "",
+        productCategory: report?.productCategory || product?.category || "",
+        productImageUrl:
+          report?.productImageUrl ||
+          (Array.isArray(product?.images) && product.images.length ? product.images[0] : ""),
+        shopName: report?.shopName || shop?.shopName || "",
+        shopAvatarUrl: report?.shopAvatarUrl || shop?.avatarUrl || "",
+      };
+    });
 
     return res.status(200).json({
       success: true,
-      reports: reports.map((report) => mapReport(report, getApiBaseUrl(req))),
+      reports: enrichedReports.map((report) => mapReport(report, getApiBaseUrl(req))),
     });
   } catch (error) {
     return res.status(500).json({

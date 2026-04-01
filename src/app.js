@@ -20,13 +20,48 @@ const notificationRoutes = require("./routes/notificationRoutes");
 dotenv.config();
 
 const app = express();
-const allowedOriginPattern = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+const parseAllowedOrigins = (rawValue) =>
+  `${rawValue ?? ""}`
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+const explicitAllowedOrigins = new Set([
+  ...parseAllowedOrigins(process.env.FRONTEND_URL),
+  ...parseAllowedOrigins(process.env.ALLOWED_ORIGINS),
+]);
+
+const isAllowedOrigin = (origin) => {
+  if (!origin) return true;
+
+  if (explicitAllowedOrigins.has(origin)) {
+    return true;
+  }
+
+  try {
+    const { protocol, hostname } = new URL(origin);
+    if (!["http:", "https:"].includes(protocol)) return false;
+
+    if (hostname === "localhost" || hostname === "127.0.0.1") {
+      return true;
+    }
+
+    if (hostname.endsWith(".vercel.app")) {
+      return true;
+    }
+
+    // Allow common private LAN IPv4 ranges so phones/tablets on the same Wi-Fi can access the app.
+    return /^(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3})$/.test(hostname);
+  } catch {
+    return false;
+  }
+};
 
 app.use("/uploads", express.static(path.join(__dirname, "..", "uploads")));
 
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOriginPattern.test(origin)) {
+    if (isAllowedOrigin(origin)) {
       return callback(null, true);
     }
 
@@ -38,6 +73,13 @@ app.use(cors({
 }));
 
 app.use(express.json());
+
+app.get("/health", (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: "OK",
+  });
+});
 
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);

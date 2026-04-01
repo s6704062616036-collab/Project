@@ -1,0 +1,27 @@
+services:
+  back:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: secondhand-back
+    env_file:
+      - ./.env
+    restart: unless-stopped
+    volumes:
+      - ./uploads:/app/uploads
+
+  front:
+    build:
+      context: ../front/projectWeb-2nd-hand-marketplace
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: /api
+        VITE_DATA_MODE: database
+        VITE_FORCE_DATA_MODE: "true"
+        VITE_HIDE_DATA_MODE_SWITCH: "true"
+    container_name: secondhand-front
+    depends_on:
+      - back
+    ports:
+      - "5173:80"
+    restart: unless-stopped

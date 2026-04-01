@@ -5,6 +5,8 @@ const toAbsoluteUrl = (value, baseUrl) => {
   if (!normalizedValue) return "";
   if (/^(?:https?:)?\/\//i.test(normalizedValue)) return normalizedValue;
   if (normalizedValue.startsWith("blob:") || normalizedValue.startsWith("data:")) return normalizedValue;
+  if (normalizedValue.startsWith("/uploads/")) return normalizedValue;
+  if (normalizedValue.startsWith("uploads/")) return `/${normalizedValue}`;
   if (normalizedValue.startsWith("/")) {
     return normalizedBaseUrl ? `${normalizedBaseUrl}${normalizedValue}` : normalizedValue;
   }
