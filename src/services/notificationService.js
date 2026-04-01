@@ -162,6 +162,44 @@ const markAllNotificationsReadForUser = async ({ userId } = {}) => {
   };
 };
 
+const deleteNotificationForUser = async ({ notificationId, userId } = {}) => {
+  const normalizedNotificationId = safeText(notificationId);
+  const normalizedUserId = safeText(userId);
+
+  if (!mongoose.isValidObjectId(normalizedNotificationId)) {
+    const error = new Error("Invalid notification id");
+    error.status = 400;
+    throw error;
+  }
+
+  const notification = await Notification.findOne({
+    _id: normalizedNotificationId,
+    user: normalizedUserId,
+  });
+
+  if (!notification) {
+    const error = new Error("Notification not found");
+    error.status = 404;
+    throw error;
+  }
+
+  if (!notification.readAt) {
+    const error = new Error("Only read notifications can be deleted");
+    error.status = 400;
+    throw error;
+  }
+
+  await notification.deleteOne();
+
+  return {
+    deletedId: normalizedNotificationId,
+    unreadCount: await Notification.countDocuments({
+      user: normalizedUserId,
+      readAt: null,
+    }),
+  };
+};
+
 module.exports = {
   createNotification,
   createNotifications,
@@ -169,4 +207,5 @@ module.exports = {
   listNotificationsForUser,
   markNotificationReadForUser,
   markAllNotificationsReadForUser,
+  deleteNotificationForUser,
 };
