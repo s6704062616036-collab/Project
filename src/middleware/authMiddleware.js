@@ -29,6 +29,14 @@ const protect = async (req, res, next) => {
       });
     }
 
+    if (`${user.banStatus ?? "active"}`.trim().toLowerCase() === "banned") {
+      return res.status(403).json({
+        success: false,
+        code: "ACCOUNT_BANNED",
+        message: "This account has been suspended by an administrator",
+      });
+    }
+
     req.user = {
       id: user._id.toString(),
       email: user.email,

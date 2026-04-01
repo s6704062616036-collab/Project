@@ -30,6 +30,7 @@ const mapStorefrontShop = (shop, owner, baseUrl) => {
     ownerId: owner?._id?.toString?.() ?? shop?.owner?.toString?.() ?? `${shop?.owner ?? ""}`,
     shopName: shop?.shopName ?? owner?.name ?? owner?.username ?? "",
     description: shop?.description ?? "",
+    province: shop?.province ?? "",
     email: owner?.email ?? "",
     phone: owner?.phone ?? "",
     citizenId: shop?.citizenId ?? "",
@@ -53,6 +54,7 @@ const mapStorefrontProduct = (product, shop, owner, baseUrl) => ({
   ownerId: product?.seller?.toString?.() ?? `${product?.seller ?? ""}`,
   shopId: shop?._id?.toString?.() ?? "",
   shopName: shop?.shopName ?? "",
+  province: shop?.province ?? "",
   shopAvatarUrl: toAbsoluteUrl(
     pickFirstNonEmpty(shop?.avatarUrl, owner?.avatarUrl),
     baseUrl,

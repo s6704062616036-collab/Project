@@ -23,6 +23,11 @@ const shopSchema = new mongoose.Schema(
       default: "",
       trim: true,
     },
+    province: {
+      type: String,
+      default: "",
+      trim: true,
+    },
     description: {
       type: String,
       default: "",

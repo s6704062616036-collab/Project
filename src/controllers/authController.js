@@ -156,6 +156,14 @@ const login = async (req, res) => {
       });
     }
 
+    if (`${user.banStatus ?? "active"}`.trim().toLowerCase() === "banned") {
+      return res.status(403).json({
+        success: false,
+        code: "ACCOUNT_BANNED",
+        message: "This account has been suspended by an administrator",
+      });
+    }
+
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
       return res.status(400).json({

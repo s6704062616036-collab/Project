@@ -27,6 +27,7 @@ const mapMarketplaceProduct = (product, shop = null) => {
     ownerId: sellerId,
     shopId: shop?._id?.toString?.() ?? "",
     shopName: shop?.shopName ?? source?.shopName ?? "",
+    province: shop?.province ?? source?.province ?? "",
     shopAvatarUrl: pickFirstNonEmpty(shop?.avatarUrl, source?.shopAvatarUrl, sellerAvatarUrl),
     name: source?.title ?? source?.name ?? "",
     imageUrl:

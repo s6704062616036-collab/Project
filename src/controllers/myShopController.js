@@ -9,6 +9,8 @@ const normalizeProductStatus = (value) => {
   return normalizedValue === "sold" ? "sold" : "available";
 };
 
+const normalizeProductDescription = (value) => `${value ?? ""}`.trim();
+
 const normalizeBirthDate = (value) => {
   const normalizedValue = `${value ?? ""}`.trim();
   if (!normalizedValue) return "";
@@ -29,6 +31,8 @@ const normalizeBirthDate = (value) => {
   return normalizedValue;
 };
 
+const normalizeProvince = (value) => `${value ?? ""}`.trim().slice(0, 100);
+
 const normalizeBankAccountNumber = (value) =>
   `${value ?? ""}`
     .replace(/\D+/g, "")
@@ -43,6 +47,7 @@ const mapShop = (shop) => {
     shopName: shop.shopName,
     citizenId: shop.citizenId,
     birthDate: shop.birthDate,
+    province: shop.province,
     description: shop.description,
     contact: shop.contact,
     avatarUrl: shop.avatarUrl,
@@ -102,6 +107,7 @@ const upsertMyShop = async (req, res) => {
       citizenId,
       kycCitizenId,
       birthDate,
+      province,
       description,
       contact,
       avatarUrl,
@@ -114,6 +120,7 @@ const upsertMyShop = async (req, res) => {
     const uploadedQrPath = req.file ? `/uploads/${req.file.filename}` : undefined;
     const normalizedCitizenId = `${citizenId ?? kycCitizenId ?? ""}`.replace(/\D+/g, "").slice(0, 13);
     const normalizedBirthDate = normalizeBirthDate(birthDate);
+    const normalizedProvince = normalizeProvince(province);
     const normalizedBankAccountNumber = normalizeBankAccountNumber(bankAccountNumber);
 
     const existingShop = await Shop.findOne({ owner: req.user.id });
@@ -154,6 +161,7 @@ const upsertMyShop = async (req, res) => {
         shopName: shopName ?? existingShop?.shopName ?? "",
         citizenId: nextCitizenId,
         birthDate: normalizedBirthDate || existingShop?.birthDate || "",
+        province: province === undefined ? existingShop?.province ?? "" : normalizedProvince,
         description: description ?? existingShop?.description ?? "",
         contact: contact ?? existingShop?.contact ?? "",
         avatarUrl: avatarUrl ?? existingShop?.avatarUrl ?? "",
@@ -242,11 +250,12 @@ const createMyProduct = async (req, res) => {
     await assertApprovedShopForSelling(req.user.id);
 
     const { name, category, price, exchangeItem, description, saleStatus, status } = req.body;
+    const normalizedDescription = normalizeProductDescription(description);
 
-    if (!name || !category || !price) {
+    if (!name || !category || !price || !normalizedDescription) {
       return res.status(400).json({
         success: false,
-        message: "Please provide name, category and price",
+        message: "Please provide name, category, price and description",
       });
     }
 
@@ -259,7 +268,7 @@ const createMyProduct = async (req, res) => {
       category,
       price,
       exchangeItem: exchangeItem ?? "",
-      description: description ?? "",
+      description: normalizedDescription,
       images: imagePaths,
       seller: req.user.id,
       status: normalizeProductStatus(saleStatus ?? status),
@@ -318,7 +327,19 @@ const updateMyProduct = async (req, res) => {
     product.category = req.body.category ?? product.category;
     product.price = req.body.price ?? product.price;
     product.exchangeItem = req.body.exchangeItem ?? product.exchangeItem;
-    product.description = req.body.description ?? product.description;
+    const nextDescription =
+      req.body.description !== undefined
+        ? normalizeProductDescription(req.body.description)
+        : normalizeProductDescription(product.description);
+
+    if (!nextDescription) {
+      return res.status(400).json({
+        success: false,
+        message: "Please provide product description",
+      });
+    }
+
+    product.description = nextDescription;
     product.status = normalizeProductStatus(req.body.saleStatus ?? req.body.status ?? product.status);
 
     if (Array.isArray(req.files) && req.files.length) {
