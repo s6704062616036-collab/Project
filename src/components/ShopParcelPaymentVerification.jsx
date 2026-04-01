@@ -252,6 +252,17 @@ export class ShopParcelPaymentVerificationModal extends React.Component {
                     {review.buyerShippingAddress?.label ? (
                       <div className="mt-2 text-sm font-medium text-zinc-800">{review.buyerShippingAddress.label}</div>
                     ) : null}
+                    {review.getBuyerAddressFieldLine?.() ? (
+                      <div className="mt-2 text-sm text-zinc-600">{review.getBuyerAddressFieldLine()}</div>
+                    ) : null}
+                    {review.getBuyerAddressLocationLine?.() ? (
+                      <div className="mt-1 text-sm text-zinc-600">{review.getBuyerAddressLocationLine()}</div>
+                    ) : null}
+                    {review.getBuyerAddressNote?.() ? (
+                      <div className="mt-2 whitespace-pre-line break-words text-sm text-zinc-500">
+                        {review.getBuyerAddressNote()}
+                      </div>
+                    ) : null}
                     <div className="mt-2 whitespace-pre-line break-words text-zinc-600">
                       {review.buyerShippingAddress?.address || "ยังไม่ได้ระบุที่อยู่จัดส่ง"}
                     </div>

@@ -1,18 +1,47 @@
 import React from "react";
+import {
+  composeStructuredAddress,
+  getAddressFieldLine,
+  getAddressLocationLine,
+} from "../utils/addressFormatter";
 
 const makeId = (index = 0) =>
   `address_${Date.now()}_${index}_${Math.random().toString(36).slice(2, 8)}`;
 
 const normalizeLabel = (value) => `${value ?? ""}`.trim().slice(0, 50);
+const normalizeText = (value, limit = 120) => `${value ?? ""}`.trim().slice(0, limit);
+const normalizePostalCode = (value) =>
+  `${value ?? ""}`
+    .replace(/\D+/g, "")
+    .slice(0, 5);
 
-const normalizeEntry = (entry, index = 0, defaults = {}) => ({
-  id: `${entry?.id ?? ""}`.trim() || makeId(index),
-  label: normalizeLabel(entry?.label),
-  recipientName: `${entry?.recipientName ?? defaults.name ?? ""}`.trim(),
-  phone: `${entry?.phone ?? defaults.phone ?? ""}`.trim(),
-  address: `${entry?.address ?? ""}`.trim(),
-  isDefault: Boolean(entry?.isDefault),
-});
+const normalizeEntry = (entry, index = 0, defaults = {}) => {
+  const houseNo = normalizeText(entry?.houseNo, 120);
+  const village = normalizeText(entry?.village, 120);
+  const district = normalizeText(entry?.district, 120);
+  const province = normalizeText(entry?.province, 120);
+  const postalCode = normalizePostalCode(entry?.postalCode);
+  const note = normalizeText(entry?.note, 300);
+  const fallbackAddress = normalizeText(entry?.address, 300);
+  const address =
+    composeStructuredAddress({ houseNo, village, district, province, postalCode, note }) ||
+    fallbackAddress;
+
+  return {
+    id: `${entry?.id ?? ""}`.trim() || makeId(index),
+    label: normalizeLabel(entry?.label),
+    recipientName: normalizeText(entry?.recipientName ?? defaults.name, 120),
+    phone: normalizeText(entry?.phone ?? defaults.phone, 40),
+    houseNo,
+    village,
+    district,
+    province,
+    postalCode,
+    note,
+    address,
+    isDefault: Boolean(entry?.isDefault),
+  };
+};
 
 const normalizeAddresses = (addresses = [], defaults = {}) => {
   const normalized = (Array.isArray(addresses) ? addresses : [])
@@ -47,27 +76,54 @@ export class SavedAddressesEditor extends React.Component {
   addAddress = () => {
     this.updateAddresses((addresses) => {
       if (addresses.length >= 5) return addresses;
-      return [...addresses, normalizeEntry({}, addresses.length, {
-        name: this.props.defaultName,
-        phone: this.props.defaultPhone,
-      })];
+      return [
+        ...addresses,
+        normalizeEntry(
+          {},
+          addresses.length,
+          {
+            name: this.props.defaultName,
+            phone: this.props.defaultPhone,
+          },
+        ),
+      ];
     });
   };
 
   removeAddress = (addressId) => {
     this.updateAddresses((addresses) => {
       const remaining = addresses.filter((entry) => entry.id !== addressId);
-      return remaining.length ? remaining : [normalizeEntry({}, 0, {
-        name: this.props.defaultName,
-        phone: this.props.defaultPhone,
-      })];
+      return remaining.length
+        ? remaining
+        : [
+            normalizeEntry(
+              {},
+              0,
+              {
+                name: this.props.defaultName,
+                phone: this.props.defaultPhone,
+              },
+            ),
+          ];
     });
   };
 
   patchAddress = (addressId, patch = {}) => {
     this.updateAddresses((addresses) =>
       addresses.map((entry) =>
-        entry.id === addressId ? { ...entry, ...patch } : entry,
+        entry.id === addressId
+          ? normalizeEntry(
+              {
+                ...entry,
+                ...patch,
+              },
+              0,
+              {
+                name: this.props.defaultName,
+                phone: this.props.defaultPhone,
+              },
+            )
+          : entry,
       ),
     );
   };
@@ -80,6 +136,21 @@ export class SavedAddressesEditor extends React.Component {
       })),
     );
   };
+
+  renderAddressSummary(entry, index) {
+    const fieldLine = getAddressFieldLine(entry);
+    const locationLine = getAddressLocationLine(entry);
+
+    return (
+      <div className="space-y-1">
+        <div className="min-w-0 break-all py-0.5 text-sm font-semibold leading-7 text-zinc-800">
+          {entry.label || `ที่อยู่ ${index + 1}`}
+        </div>
+        {fieldLine ? <div className="text-xs leading-6 text-zinc-500">{fieldLine}</div> : null}
+        {locationLine ? <div className="text-xs leading-6 text-zinc-500">{locationLine}</div> : null}
+      </div>
+    );
+  }
 
   render() {
     const defaults = {
@@ -112,9 +183,7 @@ export class SavedAddressesEditor extends React.Component {
             <div key={entry.id} className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 space-y-3">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0 flex-1 space-y-2">
-                  <div className="min-w-0 break-all py-0.5 text-sm font-semibold leading-7 text-zinc-800">
-                    {entry.label || `ที่อยู่ ${index + 1}`}
-                  </div>
+                  {this.renderAddressSummary(entry, index)}
                   <label className="flex items-center gap-2 py-0.5 text-xs leading-6 text-zinc-600">
                     <input
                       type="radio"
@@ -145,17 +214,50 @@ export class SavedAddressesEditor extends React.Component {
                 <AddressField
                   label="ชื่อผู้รับ"
                   value={entry.recipientName}
-                  onChange={(value) => this.patchAddress(entry.id, { recipientName: value })}
+                  maxLength={120}
+                  onChange={(value) => this.patchAddress(entry.id, { recipientName: normalizeText(value, 120) })}
                 />
                 <AddressField
                   label="เบอร์โทรปลายทาง"
                   value={entry.phone}
-                  onChange={(value) => this.patchAddress(entry.id, { phone: value })}
+                  maxLength={40}
+                  onChange={(value) => this.patchAddress(entry.id, { phone: normalizeText(value, 40) })}
+                />
+                <AddressField
+                  label="บ้านเลขที่"
+                  value={entry.houseNo}
+                  maxLength={120}
+                  onChange={(value) => this.patchAddress(entry.id, { houseNo: normalizeText(value, 120) })}
+                />
+                <AddressField
+                  label="หมู่"
+                  value={entry.village}
+                  maxLength={120}
+                  onChange={(value) => this.patchAddress(entry.id, { village: normalizeText(value, 120) })}
+                />
+                <AddressField
+                  label="อำเภอ / เขต"
+                  value={entry.district}
+                  maxLength={120}
+                  onChange={(value) => this.patchAddress(entry.id, { district: normalizeText(value, 120) })}
+                />
+                <AddressField
+                  label="จังหวัด"
+                  value={entry.province}
+                  maxLength={120}
+                  onChange={(value) => this.patchAddress(entry.id, { province: normalizeText(value, 120) })}
+                />
+                <AddressField
+                  label="รหัสไปรษณีย์"
+                  value={entry.postalCode}
+                  inputMode="numeric"
+                  maxLength={5}
+                  onChange={(value) => this.patchAddress(entry.id, { postalCode: normalizePostalCode(value) })}
                 />
                 <AddressTextarea
-                  label="ที่อยู่จัดส่ง"
-                  value={entry.address}
-                  onChange={(value) => this.patchAddress(entry.id, { address: value })}
+                  label="รายละเอียดเพิ่มเติม"
+                  value={entry.note}
+                  onChange={(value) => this.patchAddress(entry.id, { note: normalizeText(value, 300) })}
                   full
                 />
               </div>
@@ -169,7 +271,7 @@ export class SavedAddressesEditor extends React.Component {
 
 class AddressField extends React.Component {
   render() {
-    const { label, value, onChange, maxLength } = this.props;
+    const { label, value, onChange, maxLength, inputMode } = this.props;
     return (
       <label className="space-y-1">
         <div className="py-0.5 text-sm font-medium leading-6 text-zinc-600">{label}</div>
@@ -177,6 +279,7 @@ class AddressField extends React.Component {
           className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm leading-6 outline-none"
           value={value ?? ""}
           maxLength={maxLength}
+          inputMode={inputMode}
           onChange={(e) => onChange?.(e.target.value)}
         />
       </label>

@@ -465,6 +465,21 @@ class OrderShopSection extends React.Component {
                         .join(" | ")}
                     </div>
                   ) : null}
+                  {shopOrder?.getBuyerAddressFieldLine?.() ? (
+                    <div className="mt-1 text-sm text-zinc-600">
+                      {shopOrder.getBuyerAddressFieldLine()}
+                    </div>
+                  ) : null}
+                  {shopOrder?.getBuyerAddressLocationLine?.() ? (
+                    <div className="mt-1 text-sm text-zinc-600">
+                      {shopOrder.getBuyerAddressLocationLine()}
+                    </div>
+                  ) : null}
+                  {shopOrder?.getBuyerAddressNote?.() ? (
+                    <div className="mt-1 whitespace-pre-line break-words text-sm text-zinc-500">
+                      {shopOrder.getBuyerAddressNote()}
+                    </div>
+                  ) : null}
                   <div className="whitespace-pre-line break-words text-sm text-zinc-700">
                     {/*
                     {shopOrder?.buyerShippingAddress?.address || "ยังไม่ได้ระบุที่อยู่จัดส่ง"}

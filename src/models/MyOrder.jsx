@@ -1,5 +1,6 @@
 import { ParcelPaymentRecord } from "./ParcelPaymentRecord";
 import { ShippingMethod } from "./ShippingMethod";
+import { composeStructuredAddress, getAddressFieldLine, getAddressLocationLine } from "../utils/addressFormatter";
 
 const safeText = (value) => `${value ?? ""}`.trim();
 const toNumber = (value, fallback = 0) => {
@@ -175,7 +176,14 @@ export class MyOrderShopOrder {
           label: safeText(buyerShippingAddress.label),
           name: safeText(buyerShippingAddress.name),
           phone: safeText(buyerShippingAddress.phone),
-          address: safeText(buyerShippingAddress.address),
+          houseNo: safeText(buyerShippingAddress.houseNo),
+          village: safeText(buyerShippingAddress.village),
+          district: safeText(buyerShippingAddress.district),
+          province: safeText(buyerShippingAddress.province),
+          postalCode: safeText(buyerShippingAddress.postalCode),
+          note: safeText(buyerShippingAddress.note),
+          address:
+            composeStructuredAddress(buyerShippingAddress) || safeText(buyerShippingAddress.address),
         }
       : null;
   }
@@ -297,6 +305,15 @@ export class MyOrderShopOrder {
     return [this.buyerShippingAddress.name, this.buyerShippingAddress.phone]
       .filter(Boolean)
       .join(" | ");
+  }
+  getBuyerAddressFieldLine() {
+    return this.buyerShippingAddress ? getAddressFieldLine(this.buyerShippingAddress) : "";
+  }
+  getBuyerAddressLocationLine() {
+    return this.buyerShippingAddress ? getAddressLocationLine(this.buyerShippingAddress) : "";
+  }
+  getBuyerAddressNote() {
+    return safeText(this.buyerShippingAddress?.note);
   }
   getTrackingLine() {
     if (!this.parcelShipment?.trackingNumber) return "";

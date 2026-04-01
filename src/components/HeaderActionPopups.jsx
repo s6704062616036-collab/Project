@@ -1,6 +1,11 @@
 import React from "react";
 import { ParcelPaymentMethod } from "../models/ParcelPaymentMethod";
 import { ShippingMethod } from "../models/ShippingMethod";
+import {
+  composeStructuredAddress,
+  getAddressFieldLine,
+  getAddressLocationLine,
+} from "../utils/addressFormatter";
 
 const formatCurrency = (value) =>
   new Intl.NumberFormat("th-TH", {
@@ -8,6 +13,33 @@ const formatCurrency = (value) =>
     currency: "THB",
     maximumFractionDigits: 2,
   }).format(Number(value) || 0);
+
+const normalizeBuyerAddressEntry = (entry = {}, fallback = {}) => {
+  const houseNo = `${entry?.houseNo ?? ""}`.trim();
+  const village = `${entry?.village ?? ""}`.trim();
+  const district = `${entry?.district ?? ""}`.trim();
+  const province = `${entry?.province ?? ""}`.trim();
+  const postalCode = `${entry?.postalCode ?? ""}`.trim();
+  const note = `${entry?.note ?? ""}`.trim();
+  const address =
+    composeStructuredAddress({ houseNo, village, district, province, postalCode, note }) ||
+    `${entry?.address ?? fallback.address ?? ""}`.trim();
+
+  return {
+    id: `${entry?.id ?? ""}`.trim() || `${fallback.id ?? ""}`.trim(),
+    label: `${entry?.label ?? fallback.label ?? ""}`.trim(),
+    name: `${entry?.name ?? entry?.recipientName ?? fallback.name ?? ""}`.trim(),
+    phone: `${entry?.phone ?? fallback.phone ?? ""}`.trim(),
+    houseNo,
+    village,
+    district,
+    province,
+    postalCode,
+    note,
+    address,
+    isDefault: Boolean(entry?.isDefault ?? fallback.isDefault),
+  };
+};
 
 export class CartPopup extends React.Component {
   state = {
@@ -152,14 +184,23 @@ export class CartPopup extends React.Component {
     const buyer = this.props.buyer ?? {};
     const savedAddresses = Array.isArray(buyer?.addresses)
       ? buyer.addresses
-          .map((entry, index) => ({
-            id: `${entry?.id ?? ""}`.trim() || `address-${index + 1}`,
-            label: `${entry?.label ?? ""}`.trim() || `ที่อยู่ ${index + 1}`,
-            name: `${entry?.recipientName ?? buyer?.name ?? ""}`.trim(),
-            phone: `${entry?.phone ?? buyer?.phone ?? ""}`.trim(),
-            address: `${entry?.address ?? ""}`.trim(),
-            isDefault: Boolean(entry?.isDefault),
-          }))
+          .map((entry, index) =>
+            normalizeBuyerAddressEntry(
+              {
+                ...entry,
+                id: `${entry?.id ?? ""}`.trim() || `address-${index + 1}`,
+                label: `${entry?.label ?? ""}`.trim() || `ที่อยู่ ${index + 1}`,
+                recipientName: `${entry?.recipientName ?? buyer?.name ?? ""}`.trim(),
+                phone: `${entry?.phone ?? buyer?.phone ?? ""}`.trim(),
+              },
+              {
+                id: `address-${index + 1}`,
+                label: `ที่อยู่ ${index + 1}`,
+                name: `${buyer?.name ?? ""}`.trim(),
+                phone: `${buyer?.phone ?? ""}`.trim(),
+              },
+            )
+          )
           .filter((entry) => entry.address)
       : [];
 
@@ -175,14 +216,14 @@ export class CartPopup extends React.Component {
     if (!fallbackAddress) return [];
 
     return [
-      {
+      normalizeBuyerAddressEntry({
         id: "address-1",
         label: "ที่อยู่หลัก",
         name: `${buyer?.name ?? ""}`.trim(),
         phone: `${buyer?.phone ?? ""}`.trim(),
         address: fallbackAddress,
         isDefault: true,
-      },
+      }),
     ];
   }
 
@@ -301,6 +342,12 @@ export class CartPopup extends React.Component {
               label: selectedAddress?.label ?? "",
               name: selectedAddress?.name ?? buyerName,
               phone: selectedAddress?.phone ?? buyerPhone,
+              houseNo: selectedAddress?.houseNo ?? "",
+              village: selectedAddress?.village ?? "",
+              district: selectedAddress?.district ?? "",
+              province: selectedAddress?.province ?? "",
+              postalCode: selectedAddress?.postalCode ?? "",
+              note: selectedAddress?.note ?? "",
               address: selectedAddress?.address ?? buyerAddress,
             }
           : null,

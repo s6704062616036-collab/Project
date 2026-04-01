@@ -1,10 +1,20 @@
+import { composeStructuredAddress } from "../utils/addressFormatter";
+
 const safeText = (value) => `${value ?? ""}`.trim();
 const apiBaseUrl = `${import.meta.env.VITE_API_URL ?? ""}`.trim().replace(/\/+$/, "");
 
 const normalizeSavedAddress = (entry, index = 0, fallback = {}) => {
   if (!entry || typeof entry !== "object") return null;
 
-  const address = safeText(entry.address);
+  const houseNo = safeText(entry.houseNo);
+  const village = safeText(entry.village);
+  const district = safeText(entry.district);
+  const province = safeText(entry.province);
+  const postalCode = safeText(entry.postalCode);
+  const note = safeText(entry.note);
+  const address =
+    composeStructuredAddress({ houseNo, village, district, province, postalCode, note }) ||
+    safeText(entry.address);
   if (!address) return null;
 
   return {
@@ -12,6 +22,12 @@ const normalizeSavedAddress = (entry, index = 0, fallback = {}) => {
     label: safeText(entry.label) || `ที่อยู่ ${index + 1}`,
     recipientName: safeText(entry.recipientName ?? entry.name ?? fallback.name),
     phone: safeText(entry.phone ?? fallback.phone),
+    houseNo,
+    village,
+    district,
+    province,
+    postalCode,
+    note,
     address,
     isDefault: Boolean(entry.isDefault),
   };
@@ -51,6 +67,12 @@ export class User {
         label: "ที่อยู่หลัก",
         recipientName: safeText(this.name),
         phone: safeText(this.phone),
+        houseNo: "",
+        village: "",
+        district: "",
+        province: "",
+        postalCode: "",
+        note: "",
         address: fallbackAddress,
         isDefault: true,
       });
@@ -101,6 +123,12 @@ export class User {
         label: safeText(entry.label),
         recipientName: safeText(entry.recipientName),
         phone: safeText(entry.phone),
+        houseNo: safeText(entry.houseNo),
+        village: safeText(entry.village),
+        district: safeText(entry.district),
+        province: safeText(entry.province),
+        postalCode: safeText(entry.postalCode),
+        note: safeText(entry.note),
         address: safeText(entry.address),
         isDefault: Boolean(entry.isDefault),
       })),
