@@ -9,6 +9,7 @@ const { createCheckoutChatsForOrder } = require("./chatService");
 const { createNotifications } = require("./notificationService");
 const { mapOrder, mapParcelPaymentReview } = require("../utils/orderMapper");
 const { saveUploadedFiles } = require("./fileStorageService");
+const { composeStructuredAddress } = require("../utils/addressFormatter");
 
 const makeHttpError = (status, message) => {
   const error = new Error(message);
@@ -66,6 +67,39 @@ const parseCheckoutPayload = (body = {}) => {
   return {
     notes: `${body?.notes ?? ""}`.trim(),
     shopOrders: parsedShopOrders,
+  };
+};
+
+const normalizeBuyerShippingAddress = (entry = {}, fallback = {}) => {
+  const houseNo = `${entry?.houseNo ?? fallback?.houseNo ?? ""}`.trim();
+  const village = `${entry?.village ?? fallback?.village ?? ""}`.trim();
+  const district = `${entry?.district ?? fallback?.district ?? ""}`.trim();
+  const province = `${entry?.province ?? fallback?.province ?? ""}`.trim();
+  const postalCode = `${entry?.postalCode ?? fallback?.postalCode ?? ""}`.trim();
+  const note = `${entry?.note ?? fallback?.note ?? ""}`.trim();
+  const address =
+    composeStructuredAddress({
+      houseNo,
+      village,
+      district,
+      province,
+      postalCode,
+      note,
+    }) || `${entry?.address ?? fallback?.address ?? ""}`.trim();
+
+  return {
+    addressId: `${entry?.addressId ?? fallback?.addressId ?? ""}`.trim(),
+    label: `${entry?.label ?? fallback?.label ?? ""}`.trim(),
+    name: `${entry?.name ?? fallback?.name ?? ""}`.trim(),
+    phone: `${entry?.phone ?? fallback?.phone ?? ""}`.trim(),
+    houseNo,
+    village,
+    district,
+    province,
+    postalCode,
+    note,
+    address,
+    isDefault: Boolean(entry?.isDefault ?? fallback?.isDefault),
   };
 };
 
@@ -142,14 +176,25 @@ const buildCheckoutOrder = async ({ userId, payload, filesByFieldName }) => {
 
   const savedAddresses = Array.isArray(buyerUser.addresses)
     ? buyerUser.addresses
-        .map((entry, index) => ({
-          addressId: `${entry?.id ?? ""}`.trim() || `address-${index + 1}`,
-          label: `${entry?.label ?? ""}`.trim(),
-          name: `${entry?.recipientName ?? buyerUser?.name ?? ""}`.trim(),
-          phone: `${entry?.phone ?? buyerUser?.phone ?? ""}`.trim(),
-          address: `${entry?.address ?? ""}`.trim(),
-          isDefault: Boolean(entry?.isDefault),
-        }))
+        .map((entry, index) =>
+          normalizeBuyerShippingAddress(
+            {
+              addressId: `${entry?.id ?? ""}`.trim() || `address-${index + 1}`,
+              label: `${entry?.label ?? ""}`.trim(),
+              name: `${entry?.recipientName ?? buyerUser?.name ?? ""}`.trim(),
+              phone: `${entry?.phone ?? buyerUser?.phone ?? ""}`.trim(),
+              houseNo: `${entry?.houseNo ?? ""}`.trim(),
+              village: `${entry?.village ?? ""}`.trim(),
+              district: `${entry?.district ?? ""}`.trim(),
+              province: `${entry?.province ?? ""}`.trim(),
+              postalCode: `${entry?.postalCode ?? ""}`.trim(),
+              note: `${entry?.note ?? ""}`.trim(),
+              address: `${entry?.address ?? ""}`.trim(),
+              isDefault: Boolean(entry?.isDefault),
+            },
+            {}
+          )
+        )
         .filter((entry) => entry.address)
     : [];
   const savedAddressesById = new Map(savedAddresses.map((entry) => [entry.addressId, entry]));
@@ -270,29 +315,26 @@ const buildCheckoutOrder = async ({ userId, payload, filesByFieldName }) => {
         savedAddresses[0] ||
         null;
       const buyerShippingAddress = matchedSavedAddress
-        ? {
-            addressId: matchedSavedAddress.addressId,
-            label: matchedSavedAddress.label,
-            name: matchedSavedAddress.name,
-            phone: matchedSavedAddress.phone,
-            address: matchedSavedAddress.address,
-          }
+        ? normalizeBuyerShippingAddress(matchedSavedAddress)
         : buyerShippingAddressInput
-          ? {
-              addressId: requestedAddressId,
-              label: `${buyerShippingAddressInput.label ?? ""}`.trim(),
-              name: `${buyerShippingAddressInput.name ?? ""}`.trim(),
-              phone: `${buyerShippingAddressInput.phone ?? ""}`.trim(),
-              address: `${buyerShippingAddressInput.address ?? ""}`.trim(),
-            }
+          ? normalizeBuyerShippingAddress(
+              {
+                addressId: requestedAddressId,
+                label: `${buyerShippingAddressInput.label ?? ""}`.trim(),
+                name: `${buyerShippingAddressInput.name ?? ""}`.trim(),
+                phone: `${buyerShippingAddressInput.phone ?? ""}`.trim(),
+                houseNo: `${buyerShippingAddressInput.houseNo ?? ""}`.trim(),
+                village: `${buyerShippingAddressInput.village ?? ""}`.trim(),
+                district: `${buyerShippingAddressInput.district ?? ""}`.trim(),
+                province: `${buyerShippingAddressInput.province ?? ""}`.trim(),
+                postalCode: `${buyerShippingAddressInput.postalCode ?? ""}`.trim(),
+                note: `${buyerShippingAddressInput.note ?? ""}`.trim(),
+                address: `${buyerShippingAddressInput.address ?? ""}`.trim(),
+              },
+              fallbackSavedAddress ?? {}
+            )
           : fallbackSavedAddress
-            ? {
-                addressId: fallbackSavedAddress.addressId,
-                label: fallbackSavedAddress.label,
-                name: fallbackSavedAddress.name,
-                phone: fallbackSavedAddress.phone,
-                address: fallbackSavedAddress.address,
-              }
+            ? normalizeBuyerShippingAddress(fallbackSavedAddress)
             : null;
 
       if (!buyerShippingAddress?.address) {

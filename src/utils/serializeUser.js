@@ -7,6 +7,12 @@ const serializeUser = (user) => {
         label: entry?.label ?? "",
         recipientName: entry?.recipientName ?? "",
         phone: entry?.phone ?? "",
+        houseNo: entry?.houseNo ?? "",
+        village: entry?.village ?? "",
+        district: entry?.district ?? "",
+        province: entry?.province ?? "",
+        postalCode: entry?.postalCode ?? "",
+        note: entry?.note ?? "",
         address: entry?.address ?? "",
         isDefault: Boolean(entry?.isDefault),
       }))

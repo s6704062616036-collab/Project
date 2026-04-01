@@ -2,6 +2,7 @@ const User = require("../models/User");
 const serializeUser = require("../utils/serializeUser");
 const publicUserProfileService = require("../services/publicUserProfileService");
 const { saveUploadedFile } = require("../services/fileStorageService");
+const { composeStructuredAddress } = require("../utils/addressFormatter");
 
 const normalizeEmail = (email) => {
   if (typeof email !== "string") {
@@ -43,7 +44,21 @@ const normalizeSavedAddresses = (rawAddresses, fallbackUser = null) => {
     .map((entry, index) => {
       if (!entry || typeof entry !== "object") return null;
 
-      const address = `${entry.address ?? ""}`.trim();
+      const houseNo = `${entry.houseNo ?? ""}`.trim();
+      const village = `${entry.village ?? ""}`.trim();
+      const district = `${entry.district ?? ""}`.trim();
+      const province = `${entry.province ?? ""}`.trim();
+      const postalCode = `${entry.postalCode ?? ""}`.trim();
+      const note = `${entry.note ?? ""}`.trim();
+      const address =
+        composeStructuredAddress({
+          houseNo,
+          village,
+          district,
+          province,
+          postalCode,
+          note,
+        }) || `${entry.address ?? ""}`.trim();
       if (!address) return null;
 
       const recipientName = `${entry.recipientName ?? entry.name ?? fallbackUser?.name ?? ""}`.trim();
@@ -58,6 +73,12 @@ const normalizeSavedAddresses = (rawAddresses, fallbackUser = null) => {
         label: label.slice(0, 60),
         recipientName: recipientName.slice(0, 120),
         phone: phone.slice(0, 40),
+        houseNo: houseNo.slice(0, 120),
+        village: village.slice(0, 120),
+        district: district.slice(0, 120),
+        province: province.slice(0, 120),
+        postalCode: postalCode.slice(0, 20),
+        note: note.slice(0, 300),
         address: address.slice(0, 500),
         isDefault: Boolean(entry.isDefault),
       };
