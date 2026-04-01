@@ -102,6 +102,7 @@ export class AdminPage extends React.Component {
     reportSubmittingId: "",
     productSubmittingId: "",
     categorySubmittingId: "",
+    memberSearch: "",
     productSearch: "",
     creatingCategory: new AdminCategory(),
     editingCategoryId: "",
@@ -268,6 +269,7 @@ export class AdminPage extends React.Component {
         this.loadMembers({ silent: true });
       }
     });
+  setMemberSearch = (memberSearch) => this.setState({ memberSearch, error: "", done: "" });
   setProductSearch = (productSearch) => this.setState({ productSearch, error: "", done: "" });
 
   loadProducts = async () => {
@@ -295,6 +297,20 @@ export class AdminPage extends React.Component {
     if (!memberId) return;
 
     const targetName = member?.shopName || member?.name || "สมาชิก";
+    let note = "";
+    if (action === "reject_kyc" && typeof window !== "undefined") {
+      const promptedNote = window.prompt(
+        `ระบุเหตุผลที่ไม่อนุมัติ KYC ของ ${targetName}`,
+        member?.moderationNote || "ข้อมูลไม่ครบถ้วนหรือไม่ตรงกับหลักฐานที่ส่งมา",
+      );
+      if (promptedNote === null) return;
+      note = `${promptedNote ?? ""}`.trim();
+      if (!note) {
+        this.setState({ error: "กรุณาระบุเหตุผลที่ไม่อนุมัติ KYC", done: "" });
+        return;
+      }
+    }
+
     const confirmMessage =
       action === "approve_kyc"
         ? `ยืนยันอนุมัติ KYC ของ ${targetName} ใช่ไหม?`
@@ -309,6 +325,7 @@ export class AdminPage extends React.Component {
     try {
       const result = await this.adminService.reviewMember(memberId, {
         action,
+        note,
         decisionAt: new Date().toISOString(),
         reviewScope: action === "approve_kyc" || action === "reject_kyc" ? "shop_kyc" : "member_account",
         decisionSource: "admin_console",
@@ -514,9 +531,47 @@ export class AdminPage extends React.Component {
 
   renderMembersSection() {
     if (!this.state.members.length) return <EmptyState message="ยังไม่มีสมาชิกที่ต้องจัดการ" />;
+
+    const search = `${this.state.memberSearch ?? ""}`.trim().toLowerCase();
+    const filteredMembers = search
+      ? this.state.members.filter((member) =>
+          [
+            member?.name,
+            member?.username,
+            member?.email,
+            member?.phone,
+            member?.shopName,
+            member?.getFirstName?.(),
+            member?.getLastName?.(),
+            member?.getKycCitizenId?.(),
+            member?.bankAccountName,
+            member?.bankAccountNumber,
+          ]
+            .filter(Boolean)
+            .some((value) => `${value}`.toLowerCase().includes(search))
+        )
+      : this.state.members;
+
     return (
       <div className="space-y-4">
-        {this.state.members.map((member) => {
+        <div className="rounded-3xl border border-zinc-200 bg-zinc-50 p-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+            <label className="flex-1 space-y-1">
+              <div className="text-sm text-zinc-600">ค้นหาผู้ใช้ ร้านค้า KYC หรือข้อมูลธนาคาร</div>
+              <input
+                className="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm outline-none"
+                value={this.state.memberSearch}
+                onChange={(event) => this.setMemberSearch(event.target.value)}
+                placeholder="ค้นหาชื่อผู้ใช้ ชื่อร้าน อีเมล เบอร์ เลขบัตร หรือเลขบัญชี"
+              />
+            </label>
+            <div className="rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-600">
+              พบ <span className="font-semibold text-zinc-900">{filteredMembers.length}</span> จาก {this.state.members.length} รายการ
+            </div>
+          </div>
+        </div>
+        {!filteredMembers.length ? <EmptyState message="ไม่พบสมาชิกที่ตรงกับคำค้นหา" /> : null}
+        {filteredMembers.map((member) => {
           const isSubmitting = this.state.memberSubmittingId === member.id;
           const isFocused = this.state.focusedMemberId === member.id;
           return (
@@ -565,6 +620,11 @@ export class AdminPage extends React.Component {
                         </div>
                       </div>
                     </div>
+                    {member.moderationNote ? (
+                      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                        เหตุผล/หมายเหตุล่าสุด: {member.moderationNote}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
                 <div className="grid gap-2 md:min-w-56">
@@ -673,7 +733,7 @@ export class AdminPage extends React.Component {
     return (
       <div className="min-h-dvh bg-[radial-gradient(circle_at_top_left,_rgba(164,227,216,0.22),_transparent_30%),linear-gradient(180deg,_#f8fafc_0%,_#f5f7fb_100%)]">
         <div className="sticky top-0 z-40 border-b border-zinc-200/70 bg-[#A4E3D8]/90 backdrop-blur-sm"><div className="mx-auto flex max-w-375 items-center gap-4 px-4 py-5"><div className="overflow-hidden rounded-2xl border border-white/70 bg-white/75 shadow-sm"><img src="/App logo.jpg" alt="App logo" className="h-20 w-20 object-cover" /></div><div className="min-w-0 flex-1"><div className="text-lg font-semibold tracking-tight text-zinc-900 md:text-2xl">Administrator System</div><div className="mt-1 text-sm text-zinc-700">ตรวจสอบสมาชิก รายงานสินค้า รายงานร้านค้า และข้อมูลหลักของเว็บไซต์</div></div><div className="hidden rounded-2xl border border-zinc-200 bg-white/80 px-4 py-2 text-sm text-zinc-700 shadow-sm md:block"><div className="font-semibold text-zinc-900">{this.props.user?.name ?? "Admin"}</div><div>{this.props.user?.username ? `@${this.props.user.username}` : this.props.user?.email ?? ""}</div></div><NotificationBellButton unreadCount={Number(this.props.notificationUnreadCount ?? 0) || 0} onClick={this.props.onGoNotifications} className="app-icon-button relative grid h-10 w-10 place-items-center bg-[#F4D03E]" /><button type="button" className="rounded-2xl border border-zinc-200 bg-[#F4D03E] px-4 py-2.5 text-sm font-semibold text-zinc-900 shadow-sm" onClick={this.props.onLogout}>Log out</button></div></div>
-        <div className="mx-auto max-w-375 space-y-6 px-4 py-6"><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">{SUMMARY_CARDS.map(([label, key, className]) => <div key={label} className={`rounded-3xl border p-4 shadow-sm ${className}`}><div className="text-sm font-medium text-zinc-500">{label}</div><div className="mt-3 text-4xl font-semibold tracking-tight text-zinc-900">{getSummaryValue(this.state.summary, key)}</div></div>)}</div>{this.state.error ? <div className="rounded-3xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 shadow-sm">{this.state.error}</div> : null}{this.state.done ? <div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700 shadow-sm">{this.state.done}</div> : null}<div className="grid grid-cols-1 gap-6 xl:grid-cols-[18rem_minmax(0,1fr)]"><aside className="rounded-[28px] border border-zinc-200 bg-white p-3 shadow-sm"><div className="px-3 pb-3 text-sm font-semibold text-zinc-900">เมนูผู้ดูแลระบบ</div><div className="space-y-2">{SECTIONS.map((item) => { const active = item.key === this.state.activeSection; return <button key={item.key} type="button" onClick={() => this.setActiveSection(item.key)} aria-pressed={active} className={`w-full rounded-2xl border px-3 py-3 text-left transition ${active ? "border-amber-300 bg-[#F4D03E] text-zinc-900 shadow-sm" : "border-zinc-200 bg-zinc-50 text-zinc-700 hover:bg-zinc-100"}`}><div className="font-semibold">{item.label}</div><div className={`mt-1 text-xs ${active ? "text-zinc-700" : "text-zinc-500"}`}>{item.description}</div></button>; })}</div></aside><main className="rounded-[28px] border border-zinc-200 bg-white p-4 shadow-sm md:p-6"><SectionHeader title={activeSection.label} description={activeSection.description} right={this.state.loading ? <div className="text-sm text-zinc-500">กำลังโหลดข้อมูล...</div> : null} />{this.state.loading ? <div className="rounded-3xl border border-dashed border-zinc-300 bg-zinc-50 p-10 text-center text-sm text-zinc-500">กำลังเตรียมข้อมูลผู้ดูแลระบบ...</div> : this.renderSectionContent()}</main></div></div>
+        <div className="mx-auto max-w-375 space-y-6 px-4 py-6"><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">{SUMMARY_CARDS.map(([label, key, className]) => <div key={label} className={`rounded-3xl border p-4 shadow-sm ${className}`}><div className="text-sm font-medium text-zinc-500">{label}</div><div className="mt-3 text-4xl font-semibold tracking-tight text-zinc-900">{getSummaryValue(this.state.summary, key)}</div></div>)}</div>{this.state.error ? <div className="rounded-3xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 shadow-sm">{this.state.error}</div> : null}{this.state.done ? <div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700 shadow-sm">{this.state.done}</div> : null}<div className="grid grid-cols-1 gap-6 xl:grid-cols-[18rem_minmax(0,1fr)]"><aside className="rounded-[28px] border border-zinc-200 bg-white p-3 shadow-sm"><div className="px-3 pb-3 text-sm font-semibold text-zinc-900">เมนูผู้ดูแลระบบ</div><div className="space-y-2">{SECTIONS.map((item) => { const active = item.key === this.state.activeSection; return <button key={item.key} type="button" onClick={() => this.setActiveSection(item.key)} aria-pressed={active} className={`flex min-h-[88px] w-full flex-col justify-center rounded-2xl border px-3 py-3 text-left transition ${active ? "border-amber-300 bg-[#F4D03E] text-zinc-900 shadow-sm" : "border-zinc-200 bg-zinc-50 text-zinc-700 hover:bg-zinc-100"}`}><div className="font-semibold leading-tight">{item.label}</div><div className={`mt-1 line-clamp-2 min-h-[2rem] text-xs leading-4 ${active ? "text-zinc-700" : "text-zinc-500"}`}>{item.description}</div></button>; })}</div></aside><main className="rounded-[28px] border border-zinc-200 bg-white p-4 shadow-sm md:p-6"><SectionHeader title={activeSection.label} description={activeSection.description} right={this.state.loading ? <div className="text-sm text-zinc-500">กำลังโหลดข้อมูล...</div> : null} />{this.state.loading ? <div className="rounded-3xl border border-dashed border-zinc-300 bg-zinc-50 p-10 text-center text-sm text-zinc-500">กำลังเตรียมข้อมูลผู้ดูแลระบบ...</div> : this.renderSectionContent()}</main></div></div>
       </div>
     );
   }
