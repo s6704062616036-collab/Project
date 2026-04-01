@@ -1,4 +1,5 @@
 const chatService = require("../services/chatService");
+const { saveUploadedFile } = require("../services/fileStorageService");
 
 const handleChatError = (res, error, fallbackMessage) => {
   const statusCode = Number(error?.status) || 500;
@@ -65,14 +66,26 @@ const sendMessage = async (req, res) => {
   try {
     const imageFile = req.files?.image?.[0] ?? null;
     const videoFile = req.files?.video?.[0] ?? null;
+    const imageUrl = imageFile
+      ? await saveUploadedFile(imageFile, {
+          folder: "secondhand/chat/images",
+          resourceType: "image",
+        })
+      : "";
+    const videoUrl = videoFile
+      ? await saveUploadedFile(videoFile, {
+          folder: "secondhand/chat/videos",
+          resourceType: "video",
+        })
+      : "";
 
     const result = await chatService.sendMessage({
       req,
       userId: req.user.id,
       chatId: req.params.chatId,
       text: req.body?.text ?? req.body?.message ?? "",
-      imageUrl: imageFile ? `/uploads/${imageFile.filename}` : "",
-      videoUrl: videoFile ? `/uploads/${videoFile.filename}` : "",
+      imageUrl,
+      videoUrl,
     });
 
     return res.status(201).json({

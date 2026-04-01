@@ -3,6 +3,7 @@ const Product = require("../models/Product");
 const mongoose = require("mongoose");
 const { assertApprovedShopForSelling } = require("../services/shopKycService");
 const { notifyAdmins } = require("../services/notificationService");
+const { saveUploadedFile, saveUploadedFiles } = require("../services/fileStorageService");
 
 const normalizeProductStatus = (value) => {
   const normalizedValue = `${value ?? ""}`.trim().toLowerCase();
@@ -117,7 +118,9 @@ const upsertMyShop = async (req, res) => {
       bankAccountNumber,
     } = req.body;
 
-    const uploadedQrPath = req.file ? `/uploads/${req.file.filename}` : undefined;
+    const uploadedQrPath = req.file
+      ? await saveUploadedFile(req.file, { folder: "secondhand/shops/qr" })
+      : undefined;
     const normalizedCitizenId = `${citizenId ?? kycCitizenId ?? ""}`.replace(/\D+/g, "").slice(0, 13);
     const normalizedBirthDate = normalizeBirthDate(birthDate);
     const normalizedProvince = normalizeProvince(province);
@@ -260,7 +263,7 @@ const createMyProduct = async (req, res) => {
     }
 
     const imagePaths = Array.isArray(req.files)
-      ? req.files.map((file) => `/uploads/${file.filename}`)
+      ? await saveUploadedFiles(req.files, { folder: "secondhand/products" })
       : [];
 
     const product = await Product.create({
@@ -343,7 +346,7 @@ const updateMyProduct = async (req, res) => {
     product.status = normalizeProductStatus(req.body.saleStatus ?? req.body.status ?? product.status);
 
     if (Array.isArray(req.files) && req.files.length) {
-      product.images = req.files.map((file) => `/uploads/${file.filename}`);
+      product.images = await saveUploadedFiles(req.files, { folder: "secondhand/products" });
     }
 
     await product.save();

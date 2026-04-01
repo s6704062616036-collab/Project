@@ -1,6 +1,7 @@
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
+const { isCloudStorageEnabled } = require("../services/fileStorageService");
 
 const uploadDir = path.join(__dirname, "..", "..", "uploads");
 const ALLOWED_CHAT_MIME_TYPES = new Set([
@@ -18,7 +19,7 @@ if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
 
-const storage = multer.diskStorage({
+const diskStorage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, uploadDir);
   },
@@ -32,6 +33,8 @@ const storage = multer.diskStorage({
     cb(null, `${Date.now()}-${base}${ext}`);
   },
 });
+
+const storage = isCloudStorageEnabled() ? multer.memoryStorage() : diskStorage;
 
 const chatUpload = multer({
   storage,

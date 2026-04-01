@@ -1,6 +1,7 @@
 const User = require("../models/User");
 const serializeUser = require("../utils/serializeUser");
 const publicUserProfileService = require("../services/publicUserProfileService");
+const { saveUploadedFile } = require("../services/fileStorageService");
 
 const normalizeEmail = (email) => {
   if (typeof email !== "string") {
@@ -147,7 +148,9 @@ const updateMyProfile = async (req, res) => {
     }
 
     if (req.file) {
-      user.avatarUrl = `/uploads/${req.file.filename}`;
+      user.avatarUrl = await saveUploadedFile(req.file, {
+        folder: "secondhand/users/avatar",
+      });
     }
 
     await user.save();

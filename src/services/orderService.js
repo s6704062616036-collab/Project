@@ -8,6 +8,7 @@ const User = require("../models/User");
 const { createCheckoutChatsForOrder } = require("./chatService");
 const { createNotifications } = require("./notificationService");
 const { mapOrder, mapParcelPaymentReview } = require("../utils/orderMapper");
+const { saveUploadedFiles } = require("./fileStorageService");
 
 const makeHttpError = (status, message) => {
   const error = new Error(message);
@@ -42,12 +43,16 @@ const normalizeTrackingNumber = (value) =>
 
 const getApiBaseUrl = (req) => `${req.protocol}://${req.get("host")}`;
 
-const buildFilesByFieldName = (files = []) =>
-  new Map(
-    (Array.isArray(files) ? files : [])
-      .filter((file) => file?.fieldname)
-      .map((file) => [file.fieldname, `/uploads/${file.filename}`])
-  );
+const buildFilesByFieldName = async (files = []) => {
+  const normalizedFiles = Array.isArray(files) ? files.filter((file) => file?.fieldname) : [];
+  if (!normalizedFiles.length) return new Map();
+
+  const uploadedUrls = await saveUploadedFiles(normalizedFiles, {
+    folder: "secondhand/orders/receipts",
+  });
+
+  return new Map(normalizedFiles.map((file, index) => [file.fieldname, uploadedUrls[index] ?? ""]));
+};
 
 const parseCheckoutPayload = (body = {}) => {
   const rawShopOrders = body?.shopOrders;
@@ -379,7 +384,7 @@ const createOrderFromCartCheckout = async ({ req, userId, body, files }) => {
     throw makeHttpError(400, "Invalid checkout payload");
   }
 
-  const filesByFieldName = buildFilesByFieldName(files);
+  const filesByFieldName = await buildFilesByFieldName(files);
   const { cart, selectedCartItemIds, selectedProductIds, orderData } = await buildCheckoutOrder({
     userId,
     payload,
