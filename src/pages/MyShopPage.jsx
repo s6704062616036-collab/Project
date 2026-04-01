@@ -13,6 +13,13 @@ import {
   ShopParcelPaymentVerificationPanel,
 } from "../components/ShopParcelPaymentVerification";
 
+const CloseCircleIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" className="h-5 w-5">
+    <path d="M8 8l8 8" />
+    <path d="M16 8l-8 8" />
+  </svg>
+);
+
 const BANK_OPTIONS = [
   "",
   "กสิกรไทย (KBANK)",
@@ -1714,7 +1721,7 @@ class CreateProductModal extends React.Component {
                       <img src={previewUrl} alt={`preview-${index + 1}`} className="h-full w-full object-cover" />
                       <button
                         type="button"
-                        className="absolute right-2 top-2 z-10 grid h-10 w-10 place-items-center rounded-full border-2 border-white bg-rose-500 text-lg font-bold leading-none text-white shadow-lg ring-1 ring-rose-200 transition hover:scale-105 hover:bg-rose-600"
+                        className="absolute right-2 top-2 z-10 grid h-10 w-10 place-items-center rounded-full border-2 border-white bg-rose-500 text-transparent shadow-lg ring-1 ring-rose-200 transition hover:scale-105 hover:bg-rose-600 before:text-white before:text-xl before:font-bold before:leading-none before:content-['×']"
                         onClick={() => onRemoveImageAt?.(index)}
                         title="ลบรูปนี้"
                       >
@@ -1893,7 +1900,7 @@ class EditProductModal extends React.Component {
                       <img src={previewUrl} alt={`preview-edit-${index + 1}`} className="h-full w-full object-cover" />
                       <button
                         type="button"
-                        className="absolute right-2 top-2 z-10 grid h-10 w-10 place-items-center rounded-full border-2 border-white bg-rose-500 text-lg font-bold leading-none text-white shadow-lg ring-1 ring-rose-200 transition hover:scale-105 hover:bg-rose-600"
+                        className="absolute right-2 top-2 z-10 grid h-10 w-10 place-items-center rounded-full border-2 border-white bg-rose-500 text-transparent shadow-lg ring-1 ring-rose-200 transition hover:scale-105 hover:bg-rose-600 before:text-white before:text-xl before:font-bold before:leading-none before:content-['×']"
                         onClick={() => onRemoveImageAt?.(index)}
                         title="ลบรูปนี้"
                       >
