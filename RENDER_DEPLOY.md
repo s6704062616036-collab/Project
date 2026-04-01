@@ -4,11 +4,15 @@
 
 - Create a `Web Service`
 - Runtime: `Node`
+- Branch: `back`
+- Root Directory: leave empty if this branch contains backend files at the repo root
 
 ## Build and start commands
 
 - Build Command: `npm install`
 - Start Command: `npm start`
+
+If Render detects [render.yaml](C:\Users\Pitphiboon\Desktop\back\render.yaml), you can also deploy with Blueprint and keep these defaults automatically.
 
 ## Required environment variables
 
