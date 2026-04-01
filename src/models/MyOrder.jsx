@@ -178,6 +178,7 @@ export class MyOrderShopOrder {
           phone: safeText(buyerShippingAddress.phone),
           houseNo: safeText(buyerShippingAddress.houseNo),
           village: safeText(buyerShippingAddress.village),
+          subdistrict: safeText(buyerShippingAddress.subdistrict),
           district: safeText(buyerShippingAddress.district),
           province: safeText(buyerShippingAddress.province),
           postalCode: safeText(buyerShippingAddress.postalCode),

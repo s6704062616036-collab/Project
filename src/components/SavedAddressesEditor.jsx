@@ -18,13 +18,14 @@ const normalizePostalCode = (value) =>
 const normalizeEntry = (entry, index = 0, defaults = {}) => {
   const houseNo = normalizeText(entry?.houseNo, 120);
   const village = normalizeText(entry?.village, 120);
+  const subdistrict = normalizeText(entry?.subdistrict, 120);
   const district = normalizeText(entry?.district, 120);
   const province = normalizeText(entry?.province, 120);
   const postalCode = normalizePostalCode(entry?.postalCode);
   const note = normalizeText(entry?.note, 300);
   const fallbackAddress = normalizeText(entry?.address, 300);
   const address =
-    composeStructuredAddress({ houseNo, village, district, province, postalCode, note }) ||
+    composeStructuredAddress({ houseNo, village, subdistrict, district, province, postalCode, note }) ||
     fallbackAddress;
 
   return {
@@ -34,6 +35,7 @@ const normalizeEntry = (entry, index = 0, defaults = {}) => {
     phone: normalizeText(entry?.phone ?? defaults.phone, 40),
     houseNo,
     village,
+    subdistrict,
     district,
     province,
     postalCode,
@@ -234,6 +236,12 @@ export class SavedAddressesEditor extends React.Component {
                   value={entry.village}
                   maxLength={120}
                   onChange={(value) => this.patchAddress(entry.id, { village: normalizeText(value, 120) })}
+                />
+                <AddressField
+                  label="ตำบล / แขวง"
+                  value={entry.subdistrict}
+                  maxLength={120}
+                  onChange={(value) => this.patchAddress(entry.id, { subdistrict: normalizeText(value, 120) })}
                 />
                 <AddressField
                   label="อำเภอ / เขต"

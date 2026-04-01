@@ -3,6 +3,7 @@ const safeText = (value) => `${value ?? ""}`.trim();
 export const composeStructuredAddress = (entry = {}) => {
   const houseNo = safeText(entry.houseNo);
   const village = safeText(entry.village);
+  const subdistrict = safeText(entry.subdistrict);
   const district = safeText(entry.district);
   const province = safeText(entry.province);
   const postalCode = safeText(entry.postalCode);
@@ -10,7 +11,14 @@ export const composeStructuredAddress = (entry = {}) => {
 
   const lines = [
     [houseNo && `บ้านเลขที่ ${houseNo}`, village && `หมู่ ${village}`].filter(Boolean).join(" "),
-    [district && `อำเภอ/เขต ${district}`, province && `จังหวัด ${province}`, postalCode].filter(Boolean).join(" "),
+    [
+      subdistrict && `ตำบล/แขวง ${subdistrict}`,
+      district && `อำเภอ/เขต ${district}`,
+      province && `จังหวัด ${province}`,
+      postalCode,
+    ]
+      .filter(Boolean)
+      .join(" "),
     note,
   ]
     .map((line) => safeText(line))
@@ -26,6 +34,7 @@ export const getAddressFieldLine = (entry = {}) =>
 
 export const getAddressLocationLine = (entry = {}) =>
   [
+    safeText(entry.subdistrict) && `ตำบล/แขวง ${safeText(entry.subdistrict)}`,
     safeText(entry.district) && `อำเภอ/เขต ${safeText(entry.district)}`,
     safeText(entry.province) && `จังหวัด ${safeText(entry.province)}`,
     safeText(entry.postalCode),

@@ -8,12 +8,13 @@ const normalizeSavedAddress = (entry, index = 0, fallback = {}) => {
 
   const houseNo = safeText(entry.houseNo);
   const village = safeText(entry.village);
+  const subdistrict = safeText(entry.subdistrict);
   const district = safeText(entry.district);
   const province = safeText(entry.province);
   const postalCode = safeText(entry.postalCode);
   const note = safeText(entry.note);
   const address =
-    composeStructuredAddress({ houseNo, village, district, province, postalCode, note }) ||
+    composeStructuredAddress({ houseNo, village, subdistrict, district, province, postalCode, note }) ||
     safeText(entry.address);
   if (!address) return null;
 
@@ -24,6 +25,7 @@ const normalizeSavedAddress = (entry, index = 0, fallback = {}) => {
     phone: safeText(entry.phone ?? fallback.phone),
     houseNo,
     village,
+    subdistrict,
     district,
     province,
     postalCode,
@@ -69,6 +71,7 @@ export class User {
         phone: safeText(this.phone),
         houseNo: "",
         village: "",
+        subdistrict: "",
         district: "",
         province: "",
         postalCode: "",
@@ -125,6 +128,7 @@ export class User {
         phone: safeText(entry.phone),
         houseNo: safeText(entry.houseNo),
         village: safeText(entry.village),
+        subdistrict: safeText(entry.subdistrict),
         district: safeText(entry.district),
         province: safeText(entry.province),
         postalCode: safeText(entry.postalCode),

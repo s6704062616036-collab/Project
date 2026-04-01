@@ -17,12 +17,13 @@ const formatCurrency = (value) =>
 const normalizeBuyerAddressEntry = (entry = {}, fallback = {}) => {
   const houseNo = `${entry?.houseNo ?? ""}`.trim();
   const village = `${entry?.village ?? ""}`.trim();
+  const subdistrict = `${entry?.subdistrict ?? ""}`.trim();
   const district = `${entry?.district ?? ""}`.trim();
   const province = `${entry?.province ?? ""}`.trim();
   const postalCode = `${entry?.postalCode ?? ""}`.trim();
   const note = `${entry?.note ?? ""}`.trim();
   const address =
-    composeStructuredAddress({ houseNo, village, district, province, postalCode, note }) ||
+    composeStructuredAddress({ houseNo, village, subdistrict, district, province, postalCode, note }) ||
     `${entry?.address ?? fallback.address ?? ""}`.trim();
 
   return {
@@ -32,6 +33,7 @@ const normalizeBuyerAddressEntry = (entry = {}, fallback = {}) => {
     phone: `${entry?.phone ?? fallback.phone ?? ""}`.trim(),
     houseNo,
     village,
+    subdistrict,
     district,
     province,
     postalCode,
@@ -344,6 +346,7 @@ export class CartPopup extends React.Component {
               phone: selectedAddress?.phone ?? buyerPhone,
               houseNo: selectedAddress?.houseNo ?? "",
               village: selectedAddress?.village ?? "",
+              subdistrict: selectedAddress?.subdistrict ?? "",
               district: selectedAddress?.district ?? "",
               province: selectedAddress?.province ?? "",
               postalCode: selectedAddress?.postalCode ?? "",

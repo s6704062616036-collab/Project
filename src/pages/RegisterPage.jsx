@@ -2,6 +2,21 @@ import React from "react";
 import { AuthService } from "../services/AuthService";
 import { isEmail, minLen } from "../utils/validators";
 
+const EyeIcon = ({ open }) =>
+  open ? (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5">
+      <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  ) : (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5">
+      <path d="M3 3l18 18" />
+      <path d="M10.6 10.7a3 3 0 0 0 4 4" />
+      <path d="M9.4 5.1A11.7 11.7 0 0 1 12 5c6.5 0 10 7 10 7a17.6 17.6 0 0 1-3 3.8" />
+      <path d="M6.2 6.2A17.7 17.7 0 0 0 2 12s3.5 7 10 7c1.8 0 3.3-.4 4.7-1" />
+    </svg>
+  );
+
 export class RegisterPage extends React.Component {
   state = {
     firstName: "",
@@ -10,6 +25,8 @@ export class RegisterPage extends React.Component {
     email: "",
     password: "",
     confirmPassword: "",
+    showPassword: false,
+    showConfirmPassword: false,
     loading: false,
     error: "",
   };
@@ -19,6 +36,14 @@ export class RegisterPage extends React.Component {
   setField = (name, value) => this.setState({ [name]: value, error: "" });
 
   onChange = (e) => this.setField(e.target.name, e.target.value);
+
+  togglePasswordVisibility = () => {
+    this.setState((prev) => ({ showPassword: !prev.showPassword }));
+  };
+
+  toggleConfirmPasswordVisibility = () => {
+    this.setState((prev) => ({ showConfirmPassword: !prev.showConfirmPassword }));
+  };
 
   validateForm() {
     const { firstName, lastName, phone, email, password, confirmPassword } = this.state;
@@ -70,6 +95,8 @@ export class RegisterPage extends React.Component {
       email,
       password,
       confirmPassword,
+      showPassword,
+      showConfirmPassword,
       loading,
     } = this.state;
 
@@ -103,26 +130,46 @@ export class RegisterPage extends React.Component {
 
         <div className="space-y-1">
           <label className="text-sm font-medium">รหัสผ่าน</label>
-          <input
-            className={this.inputClass}
-            name="password"
-            type="password"
-            value={password}
-            onChange={this.onChange}
-            autoComplete="new-password"
-          />
+          <div className="relative">
+            <input
+              className={`${this.inputClass} pr-14`}
+              name="password"
+              type={showPassword ? "text" : "password"}
+              value={password}
+              onChange={this.onChange}
+              autoComplete="new-password"
+            />
+            <button
+              type="button"
+              onClick={this.togglePasswordVisibility}
+              className="app-input-action absolute inset-y-0 right-4 z-10 inline-flex items-center justify-center text-zinc-500 transition hover:text-zinc-800"
+              aria-label={showPassword ? "ซ่อนรหัสผ่าน" : "แสดงรหัสผ่าน"}
+            >
+              <EyeIcon open={showPassword} />
+            </button>
+          </div>
         </div>
 
         <div className="space-y-1">
           <label className="text-sm font-medium">ยืนยันรหัสผ่าน</label>
-          <input
-            className={this.inputClass}
-            name="confirmPassword"
-            type="password"
-            value={confirmPassword}
-            onChange={this.onChange}
-            autoComplete="new-password"
-          />
+          <div className="relative">
+            <input
+              className={`${this.inputClass} pr-14`}
+              name="confirmPassword"
+              type={showConfirmPassword ? "text" : "password"}
+              value={confirmPassword}
+              onChange={this.onChange}
+              autoComplete="new-password"
+            />
+            <button
+              type="button"
+              onClick={this.toggleConfirmPasswordVisibility}
+              className="app-input-action absolute inset-y-0 right-4 z-10 inline-flex items-center justify-center text-zinc-500 transition hover:text-zinc-800"
+              aria-label={showConfirmPassword ? "ซ่อนรหัสยืนยัน" : "แสดงรหัสยืนยัน"}
+            >
+              <EyeIcon open={showConfirmPassword} />
+            </button>
+          </div>
         </div>
 
         <button
