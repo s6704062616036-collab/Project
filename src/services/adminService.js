@@ -102,7 +102,7 @@ const getDashboardSummary = async () => {
   const now = Date.now();
   const newMembersCountPromise = User.find(
     { role: { $ne: "admin" } },
-    { createdAt: 1 }
+    { createdAt: 1, banStatus: 1 }
   ).lean();
 
   const [
@@ -110,20 +110,28 @@ const getDashboardSummary = async () => {
     productAnnouncementsCount,
     successfulExchangesCount,
     pendingKycCount,
+    approvedKycCount,
+    rejectedKycCount,
     openReportsCount,
   ] = await Promise.all([
     newMembersCountPromise,
     Product.countDocuments({ status: "available" }),
     Product.countDocuments({ status: "sold" }),
     Shop.countDocuments({ kycStatus: "pending" }),
+    Shop.countDocuments({ kycStatus: "approved" }),
+    Shop.countDocuments({ kycStatus: "rejected" }),
     Report.countDocuments({ status: "open" }),
   ]);
 
   return mapDashboardSummary({
+    totalMembersCount: users.length,
     newMembersCount: users.filter((user) => now - new Date(user.createdAt ?? 0).getTime() <= THIRTY_DAYS_IN_MS).length,
+    bannedMembersCount: users.filter((user) => `${user?.banStatus ?? ""}`.trim() === "banned").length,
     productAnnouncementsCount,
     successfulExchangesCount,
     pendingKycCount,
+    approvedKycCount,
+    rejectedKycCount,
     openReportsCount,
   });
 };

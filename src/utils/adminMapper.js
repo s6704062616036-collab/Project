@@ -111,10 +111,14 @@ const mapAdminMember = (user, shop, baseUrl) => {
 };
 
 const mapDashboardSummary = (summary = {}) => ({
+  totalMembersCount: Number(summary.totalMembersCount) || 0,
   newMembersCount: Number(summary.newMembersCount) || 0,
+  bannedMembersCount: Number(summary.bannedMembersCount) || 0,
   productAnnouncementsCount: Number(summary.productAnnouncementsCount) || 0,
   successfulExchangesCount: Number(summary.successfulExchangesCount) || 0,
   pendingKycCount: Number(summary.pendingKycCount) || 0,
+  approvedKycCount: Number(summary.approvedKycCount) || 0,
+  rejectedKycCount: Number(summary.rejectedKycCount) || 0,
   openReportsCount: Number(summary.openReportsCount) || 0,
 });
 
