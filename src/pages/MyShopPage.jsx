@@ -921,6 +921,8 @@ export class MyShopPage extends React.Component {
     const { products } = this.state;
     const canSellProducts = this.canSellProducts();
     const sellLockMessage = this.getSellLockMessage();
+    const activeProducts = products.filter((product) => !product?.isSold?.());
+    const soldProducts = products.filter((product) => product?.isSold?.());
 
     if (!products.length) {
       return (
@@ -951,16 +953,45 @@ export class MyShopPage extends React.Component {
 
     return (
       <div className="space-y-5">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {products.map((product, index) => (
-            <ProductCard
-              key={product.id || `${product.name}-${index}`}
-              product={product}
-              onEditProduct={this.openEditPopup}
-              onDeleteProduct={this.openDeleteConfirmPopup}
-            />
-          ))}
-        </div>
+        {activeProducts.length ? (
+          <section className="space-y-3">
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-700">
+              สินค้าที่กำลังลงขาย ({activeProducts.length})
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {activeProducts.map((product, index) => (
+                <ProductCard
+                  key={product.id || `${product.name}-${index}`}
+                  product={product}
+                  onEditProduct={this.openEditPopup}
+                  onDeleteProduct={this.openDeleteConfirmPopup}
+                />
+              ))}
+            </div>
+          </section>
+        ) : (
+          <section className="rounded-2xl border border-dashed border-zinc-300 bg-zinc-50 px-4 py-5 text-sm text-zinc-500">
+            ตอนนี้ยังไม่มีสินค้าที่กำลังลงขาย
+          </section>
+        )}
+
+        {soldProducts.length ? (
+          <section className="space-y-3">
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-semibold text-rose-700">
+              สินค้าที่ขายแล้ว ({soldProducts.length})
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {soldProducts.map((product, index) => (
+                <ProductCard
+                  key={product.id || `${product.name}-sold-${index}`}
+                  product={product}
+                  onEditProduct={this.openEditPopup}
+                  onDeleteProduct={this.openDeleteConfirmPopup}
+                />
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         <div className="flex justify-center">
           <button
@@ -1683,7 +1714,7 @@ class CreateProductModal extends React.Component {
                       <img src={previewUrl} alt={`preview-${index + 1}`} className="h-full w-full object-cover" />
                       <button
                         type="button"
-                        className="absolute right-1 top-1 grid h-7 w-7 place-items-center rounded-full bg-black/70 text-sm font-semibold text-white hover:bg-black/80"
+                        className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full border border-white/70 bg-rose-500 text-base font-semibold leading-none text-white shadow-md hover:bg-rose-600"
                         onClick={() => onRemoveImageAt?.(index)}
                         title="ลบรูปนี้"
                       >
@@ -1857,12 +1888,12 @@ class EditProductModal extends React.Component {
                   {imagePreviewUrls.map((previewUrl, index) => (
                     <div
                       key={`preview-edit-${index}`}
-                      className="aspect-square rounded-lg overflow-hidden border border-zinc-200 bg-zinc-100"
+                      className="relative aspect-square rounded-lg overflow-hidden border border-zinc-200 bg-zinc-100"
                     >
                       <img src={previewUrl} alt={`preview-edit-${index + 1}`} className="h-full w-full object-cover" />
                       <button
                         type="button"
-                        className="absolute right-1 top-1 grid h-7 w-7 place-items-center rounded-full bg-black/70 text-sm font-semibold text-white hover:bg-black/80"
+                        className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full border border-white/70 bg-rose-500 text-base font-semibold leading-none text-white shadow-md hover:bg-rose-600"
                         onClick={() => onRemoveImageAt?.(index)}
                         title="ลบรูปนี้"
                       >

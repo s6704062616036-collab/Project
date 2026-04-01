@@ -30,6 +30,8 @@ export default class App extends React.Component {
     searchKeyword: "",
     selectedChatId: "",
     selectedAdminSection: "",
+    selectedAdminMemberId: "",
+    selectedAdminShopId: "",
     chatUnreadCount: 0,
     notificationUnreadCount: 0,
     booting: true,
@@ -138,6 +140,8 @@ export default class App extends React.Component {
       searchKeyword: historyState?.searchKeyword ?? "",
       selectedChatId: historyState?.selectedChatId ?? "",
       selectedAdminSection: historyState?.selectedAdminSection ?? "",
+      selectedAdminMemberId: historyState?.selectedAdminMemberId ?? "",
+      selectedAdminShopId: historyState?.selectedAdminShopId ?? "",
     });
   };
 
@@ -153,6 +157,8 @@ export default class App extends React.Component {
       searchKeyword: this.state.searchKeyword ?? "",
       selectedChatId: this.state.selectedChatId ?? "",
       selectedAdminSection: this.state.selectedAdminSection ?? "",
+      selectedAdminMemberId: this.state.selectedAdminMemberId ?? "",
+      selectedAdminShopId: this.state.selectedAdminShopId ?? "",
     };
 
     try {
@@ -167,6 +173,8 @@ export default class App extends React.Component {
           searchKeyword: safePayload.searchKeyword,
           selectedChatId: safePayload.selectedChatId,
           selectedAdminSection: safePayload.selectedAdminSection,
+          selectedAdminMemberId: safePayload.selectedAdminMemberId,
+          selectedAdminShopId: safePayload.selectedAdminShopId,
         },
         "",
         window.location.href,
@@ -183,6 +191,8 @@ export default class App extends React.Component {
     const hasSearchKeyword = Object.prototype.hasOwnProperty.call(patch, "searchKeyword");
     const hasSelectedChatId = Object.prototype.hasOwnProperty.call(patch, "selectedChatId");
     const hasSelectedAdminSection = Object.prototype.hasOwnProperty.call(patch, "selectedAdminSection");
+    const hasSelectedAdminMemberId = Object.prototype.hasOwnProperty.call(patch, "selectedAdminMemberId");
+    const hasSelectedAdminShopId = Object.prototype.hasOwnProperty.call(patch, "selectedAdminShopId");
 
     this.setState(
       {
@@ -198,6 +208,8 @@ export default class App extends React.Component {
         searchKeyword: hasSearchKeyword ? patch.searchKeyword : this.state.searchKeyword,
         selectedChatId: hasSelectedChatId ? patch.selectedChatId : this.state.selectedChatId,
         selectedAdminSection: hasSelectedAdminSection ? patch.selectedAdminSection : this.state.selectedAdminSection,
+        selectedAdminMemberId: hasSelectedAdminMemberId ? patch.selectedAdminMemberId : this.state.selectedAdminMemberId,
+        selectedAdminShopId: hasSelectedAdminShopId ? patch.selectedAdminShopId : this.state.selectedAdminShopId,
       },
       () => {
         this.syncHistoryEntry({ replace });
@@ -366,6 +378,8 @@ export default class App extends React.Component {
           selectedSellerOwnerId: "",
           selectedPublicUserId: "",
           selectedAdminSection: "",
+          selectedAdminMemberId: "",
+          selectedAdminShopId: "",
         },
       });
       return;
@@ -373,14 +387,14 @@ export default class App extends React.Component {
 
     if (route === "orders") {
       this.navigate("orders", {
-        patch: { selectedChatId: "", selectedAdminSection: "" },
+        patch: { selectedChatId: "", selectedAdminSection: "", selectedAdminMemberId: "", selectedAdminShopId: "" },
       });
       return;
     }
 
     if (route === "myshop") {
       this.navigate("myshop", {
-        patch: { selectedChatId: "", selectedAdminSection: "" },
+        patch: { selectedChatId: "", selectedAdminSection: "", selectedAdminMemberId: "", selectedAdminShopId: "" },
       });
       return;
     }
@@ -391,6 +405,8 @@ export default class App extends React.Component {
         patch: {
           selectedChatId: "",
           selectedAdminSection: `${params?.section ?? ""}`.trim(),
+          selectedAdminMemberId: `${params?.memberId ?? metadata?.memberId ?? ""}`.trim(),
+          selectedAdminShopId: `${params?.shopId ?? metadata?.shopId ?? ""}`.trim(),
         },
       });
       return;
@@ -406,6 +422,8 @@ export default class App extends React.Component {
           selectedProduct: null,
           selectedChatId: "",
           selectedAdminSection: "",
+          selectedAdminMemberId: "",
+          selectedAdminShopId: "",
         },
       });
       return;
@@ -421,6 +439,8 @@ export default class App extends React.Component {
           selectedProduct: null,
           selectedChatId: "",
           selectedAdminSection: "",
+          selectedAdminMemberId: "",
+          selectedAdminShopId: "",
         },
       });
       return;
@@ -430,6 +450,19 @@ export default class App extends React.Component {
       patch: {
         selectedChatId: "",
         selectedAdminSection: "",
+        selectedAdminMemberId: "",
+        selectedAdminShopId: "",
+      },
+    });
+  };
+
+  onAdminTargetHandled = () => {
+    if (!this.state.selectedAdminMemberId && !this.state.selectedAdminShopId) return;
+    this.navigate("admin", {
+      replace: true,
+      patch: {
+        selectedAdminMemberId: "",
+        selectedAdminShopId: "",
       },
     });
   };
@@ -525,8 +558,11 @@ export default class App extends React.Component {
         <AdminPage
           user={user}
           initialSection={this.state.selectedAdminSection}
+          initialMemberId={this.state.selectedAdminMemberId}
+          initialShopId={this.state.selectedAdminShopId}
           notificationUnreadCount={notificationUnreadCount}
           onGoNotifications={this.onGoNotifications}
+          onTargetHandled={this.onAdminTargetHandled}
           onLogout={this.onLogout}
         />
       );

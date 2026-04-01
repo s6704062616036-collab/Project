@@ -100,18 +100,37 @@ export class AdminPage extends React.Component {
     creatingCategory: new AdminCategory(),
     editingCategoryId: "",
     editingCategoryDraft: new AdminCategory(),
+    focusedMemberId: "",
   };
 
   adminService = AdminService.instance();
+  memberCardRefs = new Map();
+  focusedMemberClearTimer = null;
+  handledTargetKey = "";
 
   async componentDidMount() {
     this.syncInitialSection();
     await this.loadAdminConsole();
+    this.focusRequestedMember();
   }
 
   componentDidUpdate(prevProps) {
     if (`${prevProps.initialSection ?? ""}` !== `${this.props.initialSection ?? ""}`) {
       this.syncInitialSection();
+    }
+
+    if (
+      `${prevProps.initialMemberId ?? ""}` !== `${this.props.initialMemberId ?? ""}` ||
+      `${prevProps.initialShopId ?? ""}` !== `${this.props.initialShopId ?? ""}`
+    ) {
+      this.handledTargetKey = "";
+      this.focusRequestedMember();
+    }
+  }
+
+  componentWillUnmount() {
+    if (this.focusedMemberClearTimer) {
+      window.clearTimeout(this.focusedMemberClearTimer);
     }
   }
 
@@ -148,6 +167,8 @@ export class AdminPage extends React.Component {
         reports: reportsResult?.reports ?? [],
         products: productsResult?.products ?? [],
         categories: categoriesResult?.categories ?? [],
+      }, () => {
+        this.focusRequestedMember();
       });
     } catch (error) {
       this.setState({ error: error?.message ?? "โหลดข้อมูลผู้ดูแลระบบไม่สำเร็จ" });
@@ -172,7 +193,9 @@ export class AdminPage extends React.Component {
       this.setState((state) => ({
         summary: summaryResult?.summary ?? state.summary,
         members: membersResult?.members ?? [],
-      }));
+      }), () => {
+        this.focusRequestedMember();
+      });
     } catch (error) {
       this.setState({ error: error?.message ?? "โหลดข้อมูลสมาชิกไม่สำเร็จ" });
     } finally {
@@ -180,6 +203,57 @@ export class AdminPage extends React.Component {
         this.setState({ loading: false });
       }
     }
+  };
+
+  setMemberCardRef = (memberId, node) => {
+    const safeMemberId = `${memberId ?? ""}`.trim();
+    if (!safeMemberId) return;
+    if (node) {
+      this.memberCardRefs.set(safeMemberId, node);
+      return;
+    }
+    this.memberCardRefs.delete(safeMemberId);
+  };
+
+  getRequestedMember = () => {
+    const requestedMemberId = `${this.props.initialMemberId ?? ""}`.trim();
+    const requestedShopId = `${this.props.initialShopId ?? ""}`.trim();
+    if (!requestedMemberId && !requestedShopId) return null;
+
+    return (
+      this.state.members.find((member) => {
+        const memberId = `${member?.id ?? ""}`.trim();
+        const shopId = `${member?.shopId ?? ""}`.trim();
+        return (requestedMemberId && memberId === requestedMemberId) || (requestedShopId && shopId === requestedShopId);
+      }) ?? null
+    );
+  };
+
+  focusRequestedMember = () => {
+    if (this.state.activeSection !== "members") return;
+
+    const member = this.getRequestedMember();
+    if (!member) return;
+
+    const targetKey = `${member.id}|${this.props.initialMemberId ?? ""}|${this.props.initialShopId ?? ""}`;
+    if (this.handledTargetKey === targetKey) return;
+    this.handledTargetKey = targetKey;
+
+    this.setState({ focusedMemberId: member.id }, () => {
+      const targetNode = this.memberCardRefs.get(member.id);
+      if (targetNode?.scrollIntoView) {
+        targetNode.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+
+      if (this.focusedMemberClearTimer) {
+        window.clearTimeout(this.focusedMemberClearTimer);
+      }
+      this.focusedMemberClearTimer = window.setTimeout(() => {
+        this.setState({ focusedMemberId: "" });
+      }, 3500);
+
+      this.props.onTargetHandled?.();
+    });
   };
 
   setActiveSection = (activeSection) =>
@@ -438,8 +512,17 @@ export class AdminPage extends React.Component {
       <div className="space-y-4">
         {this.state.members.map((member) => {
           const isSubmitting = this.state.memberSubmittingId === member.id;
+          const isFocused = this.state.focusedMemberId === member.id;
           return (
-            <article key={member.id} className="rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm">
+            <article
+              key={member.id}
+              ref={(node) => this.setMemberCardRef(member.id, node)}
+              className={`rounded-3xl border bg-white p-5 shadow-sm transition ${
+                isFocused
+                  ? "border-amber-300 ring-4 ring-amber-100 shadow-[0_0_0_1px_rgba(251,191,36,0.28)]"
+                  : "border-zinc-200"
+              }`}
+            >
               <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
                 <div className="flex gap-4">
                   <div className="h-16 w-16 shrink-0 overflow-hidden rounded-2xl bg-zinc-100">
@@ -450,6 +533,11 @@ export class AdminPage extends React.Component {
                       <div className="text-lg font-semibold text-zinc-900">{member.name || "ไม่ระบุชื่อสมาชิก"}</div>
                       <div className="text-sm text-zinc-500">{member.username ? `@${member.username}` : member.email || member.phone || "-"}</div>
                     </div>
+                    {isFocused ? (
+                      <div className="inline-flex w-fit rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+                        สมาชิกจากแจ้งเตือนล่าสุด
+                      </div>
+                    ) : null}
                     <div className="flex flex-wrap gap-2 text-xs font-semibold">
                       <div className={`rounded-full border px-2.5 py-1 ${kycBadge(member.kycStatus)}`}>KYC: {member.getKycStatusLabel()}</div>
                       <div className={`rounded-full border px-2.5 py-1 ${banBadge(member.banStatus)}`}>บัญชี: {member.getBanStatusLabel()}</div>
