@@ -79,6 +79,7 @@ const buyerShippingAddressSchema = new mongoose.Schema(
     phone: { type: String, default: "", trim: true },
     houseNo: { type: String, default: "", trim: true },
     village: { type: String, default: "", trim: true },
+    subdistrict: { type: String, default: "", trim: true },
     district: { type: String, default: "", trim: true },
     province: { type: String, default: "", trim: true },
     postalCode: { type: String, default: "", trim: true },

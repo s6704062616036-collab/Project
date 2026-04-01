@@ -73,6 +73,7 @@ const parseCheckoutPayload = (body = {}) => {
 const normalizeBuyerShippingAddress = (entry = {}, fallback = {}) => {
   const houseNo = `${entry?.houseNo ?? fallback?.houseNo ?? ""}`.trim();
   const village = `${entry?.village ?? fallback?.village ?? ""}`.trim();
+  const subdistrict = `${entry?.subdistrict ?? fallback?.subdistrict ?? ""}`.trim();
   const district = `${entry?.district ?? fallback?.district ?? ""}`.trim();
   const province = `${entry?.province ?? fallback?.province ?? ""}`.trim();
   const postalCode = `${entry?.postalCode ?? fallback?.postalCode ?? ""}`.trim();
@@ -81,6 +82,7 @@ const normalizeBuyerShippingAddress = (entry = {}, fallback = {}) => {
     composeStructuredAddress({
       houseNo,
       village,
+      subdistrict,
       district,
       province,
       postalCode,
@@ -94,6 +96,7 @@ const normalizeBuyerShippingAddress = (entry = {}, fallback = {}) => {
     phone: `${entry?.phone ?? fallback?.phone ?? ""}`.trim(),
     houseNo,
     village,
+    subdistrict,
     district,
     province,
     postalCode,
@@ -185,6 +188,7 @@ const buildCheckoutOrder = async ({ userId, payload, filesByFieldName }) => {
               phone: `${entry?.phone ?? buyerUser?.phone ?? ""}`.trim(),
               houseNo: `${entry?.houseNo ?? ""}`.trim(),
               village: `${entry?.village ?? ""}`.trim(),
+              subdistrict: `${entry?.subdistrict ?? ""}`.trim(),
               district: `${entry?.district ?? ""}`.trim(),
               province: `${entry?.province ?? ""}`.trim(),
               postalCode: `${entry?.postalCode ?? ""}`.trim(),
@@ -325,6 +329,7 @@ const buildCheckoutOrder = async ({ userId, payload, filesByFieldName }) => {
                 phone: `${buyerShippingAddressInput.phone ?? ""}`.trim(),
                 houseNo: `${buyerShippingAddressInput.houseNo ?? ""}`.trim(),
                 village: `${buyerShippingAddressInput.village ?? ""}`.trim(),
+                subdistrict: `${buyerShippingAddressInput.subdistrict ?? ""}`.trim(),
                 district: `${buyerShippingAddressInput.district ?? ""}`.trim(),
                 province: `${buyerShippingAddressInput.province ?? ""}`.trim(),
                 postalCode: `${buyerShippingAddressInput.postalCode ?? ""}`.trim(),

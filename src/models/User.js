@@ -32,6 +32,11 @@ const savedAddressSchema = new mongoose.Schema(
       default: "",
       trim: true,
     },
+    subdistrict: {
+      type: String,
+      default: "",
+      trim: true,
+    },
     district: {
       type: String,
       default: "",

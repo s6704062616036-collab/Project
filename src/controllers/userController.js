@@ -46,6 +46,7 @@ const normalizeSavedAddresses = (rawAddresses, fallbackUser = null) => {
 
       const houseNo = `${entry.houseNo ?? ""}`.trim();
       const village = `${entry.village ?? ""}`.trim();
+      const subdistrict = `${entry.subdistrict ?? ""}`.trim();
       const district = `${entry.district ?? ""}`.trim();
       const province = `${entry.province ?? ""}`.trim();
       const postalCode = `${entry.postalCode ?? ""}`.trim();
@@ -54,6 +55,7 @@ const normalizeSavedAddresses = (rawAddresses, fallbackUser = null) => {
         composeStructuredAddress({
           houseNo,
           village,
+          subdistrict,
           district,
           province,
           postalCode,
@@ -75,6 +77,7 @@ const normalizeSavedAddresses = (rawAddresses, fallbackUser = null) => {
         phone: phone.slice(0, 40),
         houseNo: houseNo.slice(0, 120),
         village: village.slice(0, 120),
+        subdistrict: subdistrict.slice(0, 120),
         district: district.slice(0, 120),
         province: province.slice(0, 120),
         postalCode: postalCode.slice(0, 20),

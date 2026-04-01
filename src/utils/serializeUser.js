@@ -9,6 +9,7 @@ const serializeUser = (user) => {
         phone: entry?.phone ?? "",
         houseNo: entry?.houseNo ?? "",
         village: entry?.village ?? "",
+        subdistrict: entry?.subdistrict ?? "",
         district: entry?.district ?? "",
         province: entry?.province ?? "",
         postalCode: entry?.postalCode ?? "",
