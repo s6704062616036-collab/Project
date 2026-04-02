@@ -53,7 +53,7 @@ export class PublicUserProfile {
   }
 
   getUsernameLabel() {
-    return safeText(this.user?.username) ? `@${safeText(this.user?.username)}` : "";
+    return "";
   }
 
   getJoinedAtLabel(locale = "th-TH") {

@@ -135,6 +135,8 @@ export class SearchProductsPage extends React.Component {
     try {
       const editablePayload = {
         name: profileDraft?.name ?? "",
+        firstName: profileDraft?.firstName ?? "",
+        lastName: profileDraft?.lastName ?? "",
         email: profileDraft?.email ?? "",
         phone: profileDraft?.phone ?? "",
         address: profileDraft?.address ?? "",
