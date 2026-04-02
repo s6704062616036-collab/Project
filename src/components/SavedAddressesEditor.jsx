@@ -10,19 +10,23 @@ const makeId = (index = 0) =>
 
 const normalizeLabel = (value) => `${value ?? ""}`.trim().slice(0, 50);
 const normalizeText = (value, limit = 120) => `${value ?? ""}`.trim().slice(0, limit);
+const normalizeTextareaText = (value, limit = 300) =>
+  `${value ?? ""}`
+    .replace(/\r\n/g, "\n")
+    .slice(0, limit);
 const normalizePostalCode = (value) =>
   `${value ?? ""}`
     .replace(/\D+/g, "")
     .slice(0, 5);
 
-const normalizeEntry = (entry, index = 0, defaults = {}) => {
+const normalizeEntry = (entry, index = 0, defaults = {}, { applyDefaults = false } = {}) => {
   const houseNo = normalizeText(entry?.houseNo, 120);
   const village = normalizeText(entry?.village, 120);
   const subdistrict = normalizeText(entry?.subdistrict, 120);
   const district = normalizeText(entry?.district, 120);
   const province = normalizeText(entry?.province, 120);
   const postalCode = normalizePostalCode(entry?.postalCode);
-  const note = normalizeText(entry?.note, 300);
+  const note = normalizeTextareaText(entry?.note, 300);
   const fallbackAddress = normalizeText(entry?.address, 300);
   const address =
     composeStructuredAddress({ houseNo, village, subdistrict, district, province, postalCode, note }) ||
@@ -31,8 +35,11 @@ const normalizeEntry = (entry, index = 0, defaults = {}) => {
   return {
     id: `${entry?.id ?? ""}`.trim() || makeId(index),
     label: normalizeLabel(entry?.label),
-    recipientName: normalizeText(entry?.recipientName ?? defaults.name, 120),
-    phone: normalizeText(entry?.phone ?? defaults.phone, 40),
+    recipientName: normalizeText(
+      entry?.recipientName ?? (applyDefaults ? defaults.name : ""),
+      120,
+    ),
+    phone: normalizeText(entry?.phone ?? (applyDefaults ? defaults.phone : ""), 40),
     houseNo,
     village,
     subdistrict,
@@ -45,13 +52,13 @@ const normalizeEntry = (entry, index = 0, defaults = {}) => {
   };
 };
 
-const normalizeAddresses = (addresses = [], defaults = {}) => {
+const normalizeAddresses = (addresses = [], defaults = {}, options = {}) => {
   const normalized = (Array.isArray(addresses) ? addresses : [])
-    .map((entry, index) => normalizeEntry(entry, index, defaults))
+    .map((entry, index) => normalizeEntry(entry, index, defaults, options))
     .slice(0, 5);
 
   if (!normalized.length) {
-    return [normalizeEntry({}, 0, defaults)];
+    return [normalizeEntry({}, 0, defaults, options)];
   }
 
   const defaultIndex = normalized.findIndex((entry) => entry.isDefault);
@@ -87,6 +94,7 @@ export class SavedAddressesEditor extends React.Component {
             name: this.props.defaultName,
             phone: this.props.defaultPhone,
           },
+          { applyDefaults: true },
         ),
       ];
     });
@@ -105,6 +113,7 @@ export class SavedAddressesEditor extends React.Component {
                 name: this.props.defaultName,
                 phone: this.props.defaultPhone,
               },
+              { applyDefaults: true },
             ),
           ];
     });
@@ -124,6 +133,7 @@ export class SavedAddressesEditor extends React.Component {
                 name: this.props.defaultName,
                 phone: this.props.defaultPhone,
               },
+              { applyDefaults: false },
             )
           : entry,
       ),
@@ -265,7 +275,7 @@ export class SavedAddressesEditor extends React.Component {
                 <AddressTextarea
                   label="รายละเอียดเพิ่มเติม"
                   value={entry.note}
-                  onChange={(value) => this.patchAddress(entry.id, { note: normalizeText(value, 300) })}
+                  onChange={(value) => this.patchAddress(entry.id, { note: normalizeTextareaText(value, 300) })}
                   full
                 />
               </div>
