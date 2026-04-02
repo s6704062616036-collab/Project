@@ -27,6 +27,8 @@ const serializeUser = (user) => {
     id: user._id?.toString?.() ?? user.id ?? "",
     username: user.username ?? "",
     name: user.name || user.username || "",
+    firstName: user.firstName ?? "",
+    lastName: user.lastName ?? "",
     email: user.email ?? "",
     phone: user.phone ?? "",
     address: primaryAddress?.address ?? user.address ?? "",

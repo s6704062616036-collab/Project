@@ -50,13 +50,28 @@ const pickMemberDisplayName = (user = {}) => {
   return "";
 };
 
+const pickMemberLegalName = (user = {}) => {
+  const firstName = safeText(user?.firstName);
+  const lastName = safeText(user?.lastName);
+  const fullName = [firstName, lastName].filter(Boolean).join(" ").trim();
+  if (fullName) {
+    return {
+      firstName,
+      lastName,
+      fullName,
+    };
+  }
+
+  return splitPersonName(pickMemberDisplayName(user));
+};
+
 const mapAdminMember = (user, shop, baseUrl) => {
   const displayName = pickMemberDisplayName(user);
-  const { firstName, lastName } = splitPersonName(displayName);
+  const { firstName, lastName, fullName } = pickMemberLegalName(user);
   const bankAccountName = safeText(shop?.bankAccountName);
   const bankAccountNameMatchesUserName =
-    normalizeComparableName(displayName) && normalizeComparableName(bankAccountName)
-      ? normalizeComparableName(displayName) === normalizeComparableName(bankAccountName)
+    normalizeComparableName(fullName) && normalizeComparableName(bankAccountName)
+      ? normalizeComparableName(fullName) === normalizeComparableName(bankAccountName)
       : null;
 
   return {

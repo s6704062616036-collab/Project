@@ -47,15 +47,9 @@ const buildUsername = ({ username, firstName, lastName, email }) => {
   return "user";
 };
 
-const buildDisplayName = ({ name, firstName, lastName, username }) => {
+const buildDisplayName = ({ name, username }) => {
   const directName = normalizeLoginIdentifier(name);
   if (directName) return directName;
-
-  const joinedName = [firstName, lastName]
-    .map((value) => normalizeLoginIdentifier(value))
-    .filter(Boolean)
-    .join(" ");
-  if (joinedName) return joinedName;
 
   return normalizeLoginIdentifier(username);
 };
@@ -66,6 +60,8 @@ const register = async (req, res) => {
     const email = normalizeEmail(req.body.email);
     const username = buildUsername(req.body);
     const name = buildDisplayName({ ...req.body, username });
+    const firstName = normalizeLoginIdentifier(req.body.firstName);
+    const lastName = normalizeLoginIdentifier(req.body.lastName);
 
     if (!username || !email || !password) {
       return res.status(400).json({
@@ -94,6 +90,8 @@ const register = async (req, res) => {
     const newUser = await User.create({
       username,
       name,
+      firstName,
+      lastName,
       email,
       password: hashedPassword,
       phone,

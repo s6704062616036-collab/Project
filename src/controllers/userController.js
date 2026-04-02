@@ -140,6 +140,14 @@ const updateMyProfile = async (req, res) => {
       user.name = req.body.name.trim();
     }
 
+    if (typeof req.body.firstName === "string") {
+      user.firstName = req.body.firstName.trim();
+    }
+
+    if (typeof req.body.lastName === "string") {
+      user.lastName = req.body.lastName.trim();
+    }
+
     if (typeof req.body.username === "string") {
       user.username = req.body.username.trim();
     }
