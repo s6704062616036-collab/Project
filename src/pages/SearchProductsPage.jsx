@@ -456,6 +456,8 @@ export class SearchProductsPage extends React.Component {
             onEdit={this.openEditModal}
             onGoMyShop={this.goMyShop}
             onGoMyOrders={this.goMyOrders}
+            onGoLogin={this.props.onGoLogin}
+            onGoRegister={this.props.onGoRegister}
             goMyShopButtonClassName="w-full rounded-xl bg-[#F4D03E] text-black px-3 py-2.5 text-sm font-semibold"
             onLogout={this.props.onLogout}
           />

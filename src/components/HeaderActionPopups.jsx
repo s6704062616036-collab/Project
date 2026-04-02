@@ -758,10 +758,13 @@ export class ProfilePopup extends React.Component {
       onGoMyShop,
       onGoMyOrders,
       onLogout,
+      onGoLogin,
+      onGoRegister,
       showGoMyShopButton = true,
       goMyShopButtonClassName = "w-full rounded-xl bg-[#F4D03E] px-3 py-2.5 text-sm font-semibold text-black",
       goMyOrdersButtonClassName = "w-full rounded-xl bg-[#F4D03E] px-3 py-2.5 text-sm font-semibold text-black",
     } = this.props;
+    const isAuthenticated = Boolean(user?.id || user?._id || user?.email);
 
     return (
       <div className="app-popover-overlay fixed inset-0 z-50" onClick={onClose}>
@@ -778,8 +781,8 @@ export class ProfilePopup extends React.Component {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <div className="font-semibold truncate">{user?.name || "User"}</div>
-                    {onEdit ? (
+                    <div className="font-semibold truncate">{user?.name || "Guest"}</div>
+                    {isAuthenticated && onEdit ? (
                       <button
                         type="button"
                         className="h-7 w-7 rounded-lg bg-[#F4D03E] text-white grid place-items-center text-xs"
@@ -790,12 +793,16 @@ export class ProfilePopup extends React.Component {
                       </button>
                     ) : null}
                   </div>
-                  <div className="text-xs text-zinc-500 truncate">{user?.email || ""}</div>
+                  <div className="text-xs text-zinc-500 truncate">
+                    {isAuthenticated ? user?.email || "" : "ดูสินค้าได้ก่อน แล้วค่อยเข้าสู่ระบบเมื่อพร้อม"}
+                  </div>
                 </div>
               </div>
             </div>
 
-            {showGoMyShopButton && onGoMyShop ? (
+            {isAuthenticated ? (
+              <>
+                {showGoMyShopButton && onGoMyShop ? (
               <button
                 type="button"
                 className={goMyShopButtonClassName}
@@ -815,13 +822,32 @@ export class ProfilePopup extends React.Component {
               </button>
             ) : null}
 
-            <button
+                <button
               type="button"
               className="w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-sm font-semibold text-zinc-700 hover:bg-zinc-50"
               onClick={onLogout}
-            >
-              Log out
-            </button>
+                >
+                  Log out
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className="w-full rounded-xl bg-[#F4D03E] px-3 py-2.5 text-sm font-semibold text-black"
+                  onClick={onGoLogin}
+                >
+                  เข้าสู่ระบบ
+                </button>
+                <button
+                  type="button"
+                  className="w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-sm font-semibold text-zinc-700 hover:bg-zinc-50"
+                  onClick={onGoRegister}
+                >
+                  สมัครสมาชิก
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>

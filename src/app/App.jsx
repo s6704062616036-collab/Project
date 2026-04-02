@@ -661,6 +661,8 @@ export default class App extends React.Component {
           onGoNotifications={this.onGoNotifications}
           onGoMyShop={this.onGoMyShop}
           onGoMyOrders={this.onGoMyOrders}
+          onGoLogin={() => this.go("login")}
+          onGoRegister={() => this.go("register")}
           onUpdatedUser={this.onUpdatedUser}
           onDeletedAccount={this.onDeletedAccount}
           onLogout={this.onLogout}
@@ -711,6 +713,8 @@ export default class App extends React.Component {
         onDeletedAccount={this.onDeletedAccount}
         onGoMyShop={this.onGoMyShop}
         onGoMyOrders={this.onGoMyOrders}
+        onGoLogin={() => this.go("login")}
+        onGoRegister={() => this.go("register")}
         onGoNotifications={this.onGoNotifications}
         onGoHome={this.onBackHome}
         onOpenProduct={this.onOpenProduct}

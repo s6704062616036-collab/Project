@@ -465,11 +465,13 @@ export class HomePage extends React.Component {
 
         {showProfilePopup ? (
           <HeaderProfilePopup
-            user={user}
+            user={this.props.user}
             onClose={this.closeProfilePopup}
             onEdit={this.openEditModal}
             onGoMyShop={this.goMyShop}
             onGoMyOrders={this.goMyOrders}
+            onGoLogin={this.props.onGoLogin}
+            onGoRegister={this.props.onGoRegister}
             onLogout={this.props.onLogout}
           />
         ) : null}
