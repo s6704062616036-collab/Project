@@ -4,7 +4,7 @@ const User = require("../models/User");
 const mongoose = require("mongoose");
 const { assertApprovedShopForSelling } = require("../services/shopKycService");
 const { notifyAdmins } = require("../services/notificationService");
-const { saveUploadedFile, saveUploadedFiles } = require("../services/fileStorageService");
+const { deleteUploadedFile, saveUploadedFile, saveUploadedFiles } = require("../services/fileStorageService");
 const serializeUser = require("../utils/serializeUser");
 
 const normalizeProductStatus = (value) => {
@@ -106,6 +106,8 @@ const getMyShop = async (req, res) => {
 
 const upsertMyShop = async (req, res) => {
   let session = null;
+  let uploadedQrPath = "";
+  let hasCommittedTransaction = false;
   try {
     const {
       shopName,
@@ -124,7 +126,7 @@ const upsertMyShop = async (req, res) => {
       bankAccountNumber,
     } = req.body;
 
-    const uploadedQrPath = req.file
+    uploadedQrPath = req.file
       ? await saveUploadedFile(req.file, { folder: "secondhand/shops/qr" })
       : undefined;
     const normalizedCitizenId = `${citizenId ?? kycCitizenId ?? ""}`.replace(/\D+/g, "").slice(0, 13);
@@ -223,6 +225,7 @@ const upsertMyShop = async (req, res) => {
           hasEvidenceChanged ||
           `${existingShop?.kycStatus ?? ""}`.trim().toLowerCase() !== "pending");
     });
+    hasCommittedTransaction = true;
 
     if (shouldNotifyAdmins) {
       await notifyAdmins({
@@ -251,6 +254,14 @@ const upsertMyShop = async (req, res) => {
       user: serializeUser(user),
     });
   } catch (error) {
+    if (uploadedQrPath && !hasCommittedTransaction) {
+      try {
+        await deleteUploadedFile(uploadedQrPath);
+      } catch (cleanupError) {
+        console.error("Failed to clean up uploaded shop QR file:", cleanupError.message);
+      }
+    }
+
     if (error?.statusCode === 404) {
       return res.status(404).json({
         success: false,

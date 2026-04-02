@@ -1,3 +1,4 @@
+const fs = require("fs/promises");
 const path = require("path");
 
 let cloudinary = null;
@@ -116,7 +117,99 @@ const saveUploadedFiles = async (files, options = {}) => {
   );
 };
 
+const getUploadsRoot = () => path.resolve(__dirname, "..", "..", "uploads");
+
+const extractUploadsRelativePath = (value = "") => {
+  const normalizedValue = `${value ?? ""}`.trim();
+  if (!normalizedValue) return "";
+
+  if (normalizedValue.startsWith("/uploads/")) {
+    return normalizedValue.slice("/uploads/".length);
+  }
+
+  try {
+    const parsedUrl = new URL(normalizedValue);
+    if (parsedUrl.pathname.startsWith("/uploads/")) {
+      return parsedUrl.pathname.slice("/uploads/".length);
+    }
+  } catch {
+    // Ignore non-URL values and fall through.
+  }
+
+  return "";
+};
+
+const extractCloudinaryAssetInfo = (value = "") => {
+  const normalizedValue = `${value ?? ""}`.trim();
+  if (!normalizedValue) return null;
+
+  try {
+    const parsedUrl = new URL(normalizedValue);
+    if (!parsedUrl.hostname.includes("cloudinary.com")) {
+      return null;
+    }
+
+    const segments = parsedUrl.pathname.split("/").filter(Boolean);
+    const uploadIndex = segments.indexOf("upload");
+    if (uploadIndex < 1) return null;
+
+    const resourceType = segments[uploadIndex - 1] || "image";
+    const publicIdSegments = segments.slice(uploadIndex + 1);
+    if (publicIdSegments[0] && /^v\d+$/.test(publicIdSegments[0])) {
+      publicIdSegments.shift();
+    }
+    if (!publicIdSegments.length) return null;
+
+    const lastSegment = publicIdSegments.pop();
+    const extension = path.extname(lastSegment);
+    publicIdSegments.push(extension ? lastSegment.slice(0, -extension.length) : lastSegment);
+
+    return {
+      resourceType,
+      publicId: publicIdSegments.join("/"),
+    };
+  } catch {
+    return null;
+  }
+};
+
+const deleteUploadedFile = async (value = "") => {
+  const localRelativePath = extractUploadsRelativePath(value);
+  if (localRelativePath) {
+    const uploadsRoot = getUploadsRoot();
+    const targetPath = path.resolve(uploadsRoot, localRelativePath);
+    if (!targetPath.startsWith(uploadsRoot)) {
+      return false;
+    }
+
+    try {
+      await fs.unlink(targetPath);
+      return true;
+    } catch (error) {
+      if (error?.code === "ENOENT") return false;
+      throw error;
+    }
+  }
+
+  if (!isCloudStorageEnabled()) {
+    return false;
+  }
+
+  const assetInfo = extractCloudinaryAssetInfo(value);
+  if (!assetInfo?.publicId) {
+    return false;
+  }
+
+  const result = await cloudinary.uploader.destroy(assetInfo.publicId, {
+    resource_type: assetInfo.resourceType,
+    invalidate: true,
+  });
+
+  return result?.result === "ok";
+};
+
 module.exports = {
+  deleteUploadedFile,
   isCloudStorageEnabled,
   saveUploadedFile,
   saveUploadedFiles,
