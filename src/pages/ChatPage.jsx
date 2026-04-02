@@ -461,7 +461,7 @@ export class ChatPage extends React.Component {
 
     if (!activeChat) {
       return (
-        <section className="flex min-h-[68dvh] items-center rounded-2xl bg-white p-6 text-sm text-zinc-500 shadow md:sticky md:top-28 md:self-start md:h-[calc(100dvh-8.5rem)]">
+        <section className="flex min-h-[68dvh] items-center justify-center rounded-2xl bg-white p-6 text-center text-sm text-zinc-500 shadow md:sticky md:top-28 md:self-start md:h-[calc(100dvh-8.5rem)]">
           เลือกห้องแชทจากรายการด้านซ้ายเพื่อเริ่มพูดคุยกับร้านค้า
         </section>
       );
