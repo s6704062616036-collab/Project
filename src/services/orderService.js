@@ -5,7 +5,7 @@ const Order = require("../models/Order");
 const Product = require("../models/Product");
 const Shop = require("../models/Shop");
 const User = require("../models/User");
-const { createCheckoutChatsForOrder } = require("./chatService");
+const { createCheckoutChatsForOrder, appendParcelShipmentUpdateToChat } = require("./chatService");
 const { createNotifications } = require("./notificationService");
 const { mapOrder, mapParcelPaymentReview } = require("../utils/orderMapper");
 const { saveUploadedFiles } = require("./fileStorageService");
@@ -41,6 +41,41 @@ const normalizeTrackingNumber = (value) =>
     .trim()
     .replace(/\s+/g, "")
     .slice(0, 60);
+
+const formatParcelShipmentNotificationMessage = ({
+  action,
+  shopName,
+  trackingNumber,
+  carrier,
+  note,
+} = {}) => {
+  const normalizedAction = `${action ?? ""}`.trim().toLowerCase() === "ship" ? "ship" : "prepare";
+  const normalizedShopName = `${shopName ?? ""}`.trim() || "ร้านค้า";
+  const normalizedTrackingNumber = `${trackingNumber ?? ""}`.trim();
+  const normalizedCarrier = `${carrier ?? ""}`.trim();
+  const normalizedNote = `${note ?? ""}`.trim();
+
+  const lines = [
+    normalizedAction === "ship"
+      ? `${normalizedShopName} จัดส่งพัสดุของคุณแล้ว`
+      : `${normalizedShopName} กำลังเตรียมจัดส่งพัสดุของคุณ`,
+  ];
+
+  if (normalizedCarrier) {
+    lines.push(`บริษัทขนส่ง: ${normalizedCarrier}`);
+  }
+  if (normalizedTrackingNumber) {
+    lines.push(`เลขพัสดุ: ${normalizedTrackingNumber}`);
+  }
+  if (normalizedNote) {
+    lines.push(`หมายเหตุ: ${normalizedNote}`);
+  }
+  if (normalizedAction === "ship") {
+    lines.push("กดเปิดดูเพื่อเช็กสถานะและรายละเอียดการจัดส่งได้เลย");
+  }
+
+  return lines.join("\n");
+};
 
 const getApiBaseUrl = (req) => `${req.protocol}://${req.get("host")}`;
 
@@ -871,11 +906,150 @@ const updateSellerParcelShipment = async ({
   };
 };
 
+const updateSellerParcelShipmentV2 = async ({
+  req,
+  ownerId,
+  orderId,
+  shopOrderKey,
+  action,
+  trackingNumber,
+  carrier,
+  note,
+}) => {
+  if (!mongoose.isValidObjectId(orderId)) {
+    throw makeHttpError(400, "Invalid order id");
+  }
+
+  const normalizedAction = normalizeShipmentAction(action);
+  const normalizedTrackingNumber = normalizeTrackingNumber(trackingNumber);
+  const normalizedCarrier = `${carrier ?? ""}`.trim().slice(0, 80);
+  const normalizedNote = `${note ?? ""}`.trim().slice(0, 300);
+
+  const order = await Order.findById(orderId);
+  if (!order) {
+    throw makeHttpError(404, "Order not found");
+  }
+
+  const shopOrderIndex = findShopOrderIndex(order, shopOrderKey);
+  if (shopOrderIndex < 0) {
+    throw makeHttpError(404, "Shop order not found");
+  }
+
+  const shopOrder = order.shopOrders[shopOrderIndex];
+  const shopOwnerId = `${shopOrder?.ownerId?.toString?.() ?? shopOrder?.ownerId ?? ""}`.trim();
+  if (shopOwnerId !== `${ownerId}`) {
+    throw makeHttpError(403, "You are not allowed to manage this shop order");
+  }
+
+  if (`${shopOrder?.shippingMethod ?? ""}`.trim().toLowerCase() !== "parcel") {
+    throw makeHttpError(400, "This shop order is not a parcel delivery");
+  }
+
+  const currentStatus = `${shopOrder?.status ?? ""}`.trim().toLowerCase();
+
+  if (["cancelled", "completed", "rejected_by_buyer", "reported_to_admin"].includes(currentStatus)) {
+    throw makeHttpError(400, "This shop order can no longer be updated");
+  }
+
+  if (currentStatus === "parcel_in_transit") {
+    throw makeHttpError(400, "Shipped parcel details can no longer be updated");
+  }
+
+  const nowIso = new Date().toISOString();
+  const currentShipment = shopOrder?.parcelShipment ?? {};
+  const nextTrackingNumber = normalizedTrackingNumber || `${currentShipment?.trackingNumber ?? ""}`.trim();
+
+  if (normalizedAction === "ship" && !nextTrackingNumber) {
+    throw makeHttpError(400, "Tracking number is required before marking the parcel as shipped");
+  }
+
+  const nextStatus = normalizedAction === "ship" ? "parcel_in_transit" : "preparing_parcel";
+  const nextCarrier = normalizedCarrier || `${currentShipment?.carrier ?? ""}`.trim();
+  const nextNote = normalizedNote || `${currentShipment?.note ?? ""}`.trim();
+
+  shopOrder.parcelShipment = {
+    trackingNumber: nextTrackingNumber,
+    carrier: nextCarrier,
+    status: nextStatus,
+    note: nextNote,
+    preparedAt:
+      `${currentShipment?.preparedAt ?? ""}`.trim() ||
+      (nextStatus === "preparing_parcel" || nextStatus === "parcel_in_transit" ? nowIso : ""),
+    shippedAt:
+      nextStatus === "parcel_in_transit"
+        ? `${currentShipment?.shippedAt ?? ""}`.trim() || nowIso
+        : `${currentShipment?.shippedAt ?? ""}`.trim(),
+    updatedAt: nowIso,
+  };
+  shopOrder.status = nextStatus;
+  if (shopOrder.parcelPayment) {
+    shopOrder.parcelPayment.status = nextStatus;
+  }
+
+  order.status = deriveOrderStatus(order.shopOrders);
+  await order.save();
+
+  await appendParcelShipmentUpdateToChat({
+    order,
+    shopOrder,
+    action: normalizedAction,
+    trackingNumber: nextTrackingNumber,
+    carrier: nextCarrier,
+    note: nextNote,
+  });
+
+  await createNotifications([
+    {
+      userId: `${order?.user?.toString?.() ?? order?.user ?? ""}`.trim(),
+      type: normalizedAction === "ship" ? "parcel_shipped" : "parcel_preparing",
+      title:
+        normalizedAction === "ship"
+          ? "ร้านค้าได้จัดส่งพัสดุแล้ว"
+          : "ร้านค้ากำลังเตรียมจัดส่งพัสดุ",
+      message: formatParcelShipmentNotificationMessage({
+        action: normalizedAction,
+        shopName: shopOrder?.shopName,
+        trackingNumber: nextTrackingNumber,
+        carrier: nextCarrier,
+        note: nextNote,
+      }),
+      target: {
+        route: "orders",
+        params: {
+          orderId: order._id.toString(),
+          shopOrderKey: `${shopOrder?.shopOrderKey ?? ""}`.trim(),
+        },
+      },
+      metadata: {
+        orderId: order._id.toString(),
+        shopOrderKey: `${shopOrder?.shopOrderKey ?? ""}`.trim(),
+        trackingNumber: nextTrackingNumber,
+        carrier: nextCarrier,
+        note: nextNote,
+        shopName: `${shopOrder?.shopName ?? ""}`.trim(),
+        shippingStatus: nextStatus,
+      },
+    },
+  ]);
+
+  const updatedOrder = await getOrderWithBuyer(order._id);
+  return {
+    order: mapOrder(updatedOrder.order, {
+      baseUrl: getApiBaseUrl(req),
+      buyer: updatedOrder.buyer,
+    }),
+    message:
+      normalizedAction === "ship"
+        ? "อัปเดตเลขพัสดุและแจ้งจัดส่งเรียบร้อย"
+        : "อัปเดตสถานะเป็นกำลังเตรียมจัดส่งแล้ว",
+  };
+};
+
 module.exports = {
   createOrderFromCartCheckout,
   listOrdersForBuyer,
   updateBuyerShopOrderDecision,
   listSellerParcelPaymentReviews,
   updateSellerParcelPaymentReviewDecision,
-  updateSellerParcelShipment,
+  updateSellerParcelShipment: updateSellerParcelShipmentV2,
 };

@@ -858,6 +858,62 @@ const createCheckoutChatsForOrder = async ({ buyerId, order }) => {
   }
 };
 
+const appendParcelShipmentUpdateToChat = async ({
+  order,
+  shopOrder,
+  action,
+  trackingNumber,
+  carrier,
+  note,
+} = {}) => {
+  const firstItem = shopOrder?.items?.[0];
+  if (!order?._id || !firstItem?.productId || !shopOrder?.ownerId || !order?.user) {
+    return null;
+  }
+
+  const chat = await Chat.findOne({
+    productId: firstItem.productId,
+    ownerId: shopOrder.ownerId,
+    buyerId: order.user,
+  });
+  if (!chat) return null;
+
+  const normalizedAction = safeText(action).toLowerCase() === "ship" ? "ship" : "prepare";
+  const normalizedTrackingNumber = safeText(trackingNumber);
+  const normalizedCarrier = safeText(carrier);
+  const normalizedNote = safeText(note);
+
+  const lines = [
+    normalizedAction === "ship" ? "ร้านค้าได้จัดส่งพัสดุแล้ว" : "ร้านค้ากำลังเตรียมจัดส่งพัสดุ",
+    `คำสั่งซื้อ #${order._id.toString()}`,
+  ];
+
+  if (safeText(shopOrder?.shopName)) {
+    lines.push(`ร้านค้า: ${safeText(shopOrder.shopName)}`);
+  }
+  if (normalizedCarrier) {
+    lines.push(`บริษัทขนส่ง: ${normalizedCarrier}`);
+  }
+  if (normalizedTrackingNumber) {
+    lines.push(`เลขพัสดุ: ${normalizedTrackingNumber}`);
+  }
+  if (normalizedNote) {
+    lines.push(`หมายเหตุการจัดส่ง: ${normalizedNote}`);
+  }
+  if (normalizedAction === "ship") {
+    lines.push("คุณสามารถตรวจสอบรายละเอียดเพิ่มเติมได้ในรายการสั่งซื้อของฉัน");
+  }
+
+  appendChatMessage(chat, {
+    senderId: shopOrder.ownerId,
+    orderId: order._id,
+    text: lines.join("\n"),
+  });
+  updateReadMarkerOnChat(chat, shopOrder.ownerId, getLatestMessageTimestamp(chat));
+  await chat.save();
+  return chat;
+};
+
 module.exports = {
   listMyChats,
   listMessages,
@@ -866,4 +922,5 @@ module.exports = {
   respondMeetupProposal,
   confirmMeetupHandover,
   createCheckoutChatsForOrder,
+  appendParcelShipmentUpdateToChat,
 };
