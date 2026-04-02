@@ -1,5 +1,6 @@
 import React from "react";
 import { LoginPage } from "../pages/LoginPage";
+import { ForgotPasswordPage } from "../pages/ForgotPasswordPage";
 import { RegisterPage } from "../pages/RegisterPage";
 import { HomePage } from "../pages/HomePage";
 import { MyShopPage } from "../pages/MyShopPage";
@@ -48,7 +49,7 @@ export default class App extends React.Component {
     onRefresh: () => this.refreshNotificationUnreadCount(),
     databasePollIntervalMs: 5000,
   });
-  appRoutes = new Set(["login", "register", "home", "myshop", "product", "seller", "profile", "search", "chat", "orders", "admin", "notifications"]);
+  appRoutes = new Set(["login", "forgot-password", "register", "home", "myshop", "product", "seller", "profile", "search", "chat", "orders", "admin", "notifications"]);
   chatUnreadRefreshInFlight = false;
   pendingChatUnreadRefresh = false;
   notificationUnreadRefreshInFlight = false;
@@ -515,10 +516,11 @@ export default class App extends React.Component {
     if (booting) return null;
 
     // guard (ป้องกันผู้ใช้ที่ยังไม่ login เข้าหน้าในระบบผ่าน browser back)
-    if (!user && !["login", "register"].includes(route)) {
+    if (!user && !["login", "forgot-password", "register"].includes(route)) {
       return this.renderWithDataModeSwitch(
         <LoginPage
           onGoRegister={() => this.go("register")}
+          onGoForgotPassword={() => this.go("forgot-password")}
           onLoggedIn={this.onLoggedIn}
         />
       );
@@ -528,7 +530,16 @@ export default class App extends React.Component {
       return this.renderWithDataModeSwitch(
         <LoginPage
           onGoRegister={() => this.go("register")}
+          onGoForgotPassword={() => this.go("forgot-password")}
           onLoggedIn={this.onLoggedIn}
+        />
+      );
+    }
+
+    if (route === "forgot-password") {
+      return this.renderWithDataModeSwitch(
+        <ForgotPasswordPage
+          onGoLogin={() => this.go("login")}
         />
       );
     }

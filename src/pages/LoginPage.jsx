@@ -133,6 +133,12 @@ export class LoginPage extends React.Component {
           </div>
 
           <div className="relative z-10 text-center text-sm text-zinc-700">
+            <button type="button" onClick={this.props.onGoForgotPassword} className="font-medium underline">
+              ลืมรหัสผ่าน?
+            </button>
+          </div>
+
+          <div className="relative z-10 text-center text-sm text-zinc-700">
             ยังไม่มีบัญชีผู้ใช้?{" "}
             <button type="button" onClick={this.props.onGoRegister} className="font-medium underline">
               สมัครบัญชี

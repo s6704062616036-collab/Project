@@ -51,6 +51,10 @@ export class AuthService {
     return this.http.post("/api/auth/register", formData);
   }
 
+  async resetPassword(payload) {
+    return this.http.post("/api/auth/reset-password", payload);
+  }
+
   async me() {
     // backend: GET /api/auth/me -> { user: {...} }
     const result = await this.http.get("/api/auth/me");
