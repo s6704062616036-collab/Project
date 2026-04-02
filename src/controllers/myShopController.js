@@ -36,6 +36,12 @@ const normalizeBirthDate = (value) => {
 
 const normalizeProvince = (value) => `${value ?? ""}`.trim().slice(0, 100);
 const normalizeLegalName = (value) => `${value ?? ""}`.trim().slice(0, 120);
+const normalizeNameForComparison = (value) =>
+  `${value ?? ""}`
+    .trim()
+    .normalize("NFC")
+    .replace(/\s+/g, "")
+    .toLowerCase();
 
 const normalizeBankAccountNumber = (value) =>
   `${value ?? ""}`
@@ -135,9 +141,26 @@ const upsertMyShop = async (req, res) => {
     const explicitKycSubmissionRequested = normalizedSubmissionAction === "submit_kyc_review";
     const normalizedFirstName = normalizeLegalName(firstName);
     const normalizedLastName = normalizeLegalName(lastName);
+    const normalizedLegalFullNameForComparison = normalizeNameForComparison(
+      [normalizedFirstName, normalizedLastName].filter(Boolean).join(" ")
+    );
+    const normalizedBankAccountName = `${bankAccountName ?? ""}`.trim();
+    const normalizedBankAccountNameForComparison = normalizeNameForComparison(normalizedBankAccountName);
     const normalizedBirthDate = normalizeBirthDate(birthDate);
     const normalizedProvince = normalizeProvince(province);
     const normalizedBankAccountNumber = normalizeBankAccountNumber(bankAccountNumber);
+
+    if (
+      normalizedBankAccountName &&
+      normalizedLegalFullNameForComparison &&
+      normalizedBankAccountNameForComparison !== normalizedLegalFullNameForComparison
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "ชื่อบัญชีธนาคารต้องตรงกับชื่อจริงและนามสกุล",
+      });
+    }
+
     let user = null;
     let shop = null;
     let shouldNotifyAdmins = false;
@@ -209,7 +232,7 @@ const upsertMyShop = async (req, res) => {
           avatarUrl: avatarUrl ?? existingShop?.avatarUrl ?? "",
           parcelQrCodeUrl: nextParcelQrCodeUrl,
           bankName: `${bankName ?? existingShop?.bankName ?? ""}`.trim(),
-          bankAccountName: `${bankAccountName ?? existingShop?.bankAccountName ?? ""}`.trim(),
+          bankAccountName: normalizedBankAccountName || existingShop?.bankAccountName || "",
           bankAccountNumber: normalizedBankAccountNumber || existingShop?.bankAccountNumber || "",
           kycStatus: nextKycStatus,
           kycSubmittedAt: nextKycSubmittedAt,
