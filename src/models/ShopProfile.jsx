@@ -48,6 +48,11 @@ const normalizeBirthDate = (value) => {
 };
 
 const normalizeProvince = (value) => safeText(value).slice(0, 100);
+const normalizeNameForComparison = (value) =>
+  safeText(value)
+    .normalize("NFC")
+    .replace(/\s+/g, "")
+    .toLowerCase();
 
 const normalizePendingSubmission = (input = {}) => {
   if (!input || typeof input !== "object") return null;
@@ -74,6 +79,8 @@ export class ShopProfile {
   constructor({
     id,
     ownerId,
+    firstName,
+    lastName,
     shopName,
     description,
     email,
@@ -97,6 +104,8 @@ export class ShopProfile {
   } = {}) {
     this.id = id ?? "";
     this.ownerId = ownerId ?? "";
+    this.firstName = safeText(firstName);
+    this.lastName = safeText(lastName);
     this.shopName = shopName ?? "";
     this.description = description ?? "";
     this.email = email ?? "";
@@ -127,6 +136,8 @@ export class ShopProfile {
     return new ShopProfile({
       id: json?.id ?? json?._id,
       ownerId: json?.ownerId ?? json?.sellerId ?? json?.userId,
+      firstName: json?.firstName,
+      lastName: json?.lastName,
       shopName: json?.shopName ?? json?.name,
       description: json?.description ?? json?.bio,
       email: json?.email,
@@ -212,6 +223,17 @@ export class ShopProfile {
     return safeText(this.shopName) || "ร้านค้าผู้ขาย";
   }
 
+  getLegalFullName() {
+    return [safeText(this.firstName), safeText(this.lastName)].filter(Boolean).join(" ");
+  }
+
+  hasMatchingBankAccountName() {
+    const legalFullName = normalizeNameForComparison(this.getLegalFullName());
+    const bankAccountName = normalizeNameForComparison(this.bankAccountName);
+    if (!legalFullName || !bankAccountName) return false;
+    return legalFullName === bankAccountName;
+  }
+
   canDirectSave({ hasNewQrFile = false } = {}) {
     return this.hasApprovedKycHistory() && !this.hasPendingSubmission() && !hasNewQrFile;
   }
@@ -243,6 +265,8 @@ export class ShopProfile {
 
     return new ShopProfile({
       ...this,
+      firstName: this.firstName,
+      lastName: this.lastName,
       shopName: this.pendingSubmission.shopName ?? "",
       description: this.pendingSubmission.description ?? "",
       citizenId: this.pendingSubmission.citizenId ?? "",
@@ -257,7 +281,13 @@ export class ShopProfile {
   }
 
   validate({ requireQrCode = false, hasQrFile = false } = {}) {
+    if (!safeText(this.firstName)) return "กรุณากรอกชื่อจริง";
+    if (!safeText(this.lastName)) return "กรุณากรอกนามสกุล";
     if (!safeText(this.shopName)) return "กรุณากรอกชื่อร้าน";
+
+    if (safeText(this.bankAccountName) && !this.hasMatchingBankAccountName()) {
+      return "ชื่ อบัญชีธนาคารต้องตรงกับชื่อจริงและนามสกุล".replace("ชื่ อ", "ชื่อ");
+    }
 
     const normalizedCitizenId = ShopProfile.normalizeCitizenId(this.citizenId);
     if (normalizedCitizenId.length !== 13) {
@@ -273,6 +303,8 @@ export class ShopProfile {
 
   toPayload() {
     return {
+      firstName: this.firstName,
+      lastName: this.lastName,
       shopName: this.shopName,
       description: this.description,
       citizenId: this.citizenId,

@@ -3,6 +3,7 @@ import { ShopProfile } from "../models/ShopProfile";
 import { ShopProduct } from "../models/ShopProduct";
 import { SellerParcelPaymentReview } from "../models/SellerParcelPaymentReview";
 import { ProductSaleSyncRequest } from "../models/ProductSaleSyncRequest";
+import { User } from "../models/User";
 
 const ensureArray = (value) => (Array.isArray(value) ? value : value == null ? [] : [value]);
 
@@ -46,6 +47,13 @@ const extractMessage = (payload, fallbackMessage) =>
     ["meta", "message"],
     ["result", "message"],
   ]) ?? fallbackMessage;
+
+const extractUserPayload = (payload) =>
+  pickFirstDefined(payload, [
+    ["user"],
+    ["data", "user"],
+    ["result", "user"],
+  ]);
 
 const buildShopUpsertPayload = (payload = {}, kycContext = {}) => {
   const directSave = Boolean(kycContext?.directSave);
@@ -226,8 +234,10 @@ export class MyShopService {
         body: requestBody,
       });
       const shopPayload = extractShopPayload(result);
+      const userPayload = extractUserPayload(result);
       return {
         shop: shopPayload ? ShopProfile.fromJSON(shopPayload) : null,
+        user: userPayload ? User.fromJSON(userPayload) : null,
         message: extractMessage(result, "อัปเดตข้อมูลร้านแล้ว"),
       };
     }
@@ -249,8 +259,10 @@ export class MyShopService {
       body: formData,
     });
     const shopPayload = extractShopPayload(result);
+    const userPayload = extractUserPayload(result);
     return {
       shop: shopPayload ? ShopProfile.fromJSON(shopPayload) : null,
+      user: userPayload ? User.fromJSON(userPayload) : null,
       message: extractMessage(result, "อัปเดตข้อมูลร้านแล้ว"),
     };
   }

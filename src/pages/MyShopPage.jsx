@@ -231,9 +231,13 @@ export class MyShopPage extends React.Component {
     try {
       const { shop } = await this.myShopService.me();
       const nextShop = shop ?? ShopProfile.empty();
+      const seededDraft = nextShop.toEditableDraft().withPatch({
+        firstName: this.props.user?.firstName ?? nextShop.firstName ?? "",
+        lastName: this.props.user?.lastName ?? nextShop.lastName ?? "",
+      });
       this.setState({
         shopProfile: nextShop,
-        shopDraft: nextShop.toEditableDraft(),
+        shopDraft: seededDraft,
       });
     } catch (e) {
       this.setState({
@@ -617,11 +621,17 @@ export class MyShopPage extends React.Component {
       this.revokePreviewUrls([this.state.shopQrPreviewUrl].filter(Boolean));
       this.setState({
         shopProfile: updatedShop,
-        shopDraft: updatedShop.toEditableDraft(),
+        shopDraft: updatedShop.toEditableDraft().withPatch({
+          firstName: result?.user?.firstName ?? updatedShop.firstName ?? shopDraft.firstName ?? "",
+          lastName: result?.user?.lastName ?? updatedShop.lastName ?? shopDraft.lastName ?? "",
+        }),
         shopQrFile: null,
         shopQrPreviewUrl: "",
         shopDone: result?.message ?? "อัปเดตข้อมูลร้านเรียบร้อย",
       });
+      if (result?.user) {
+        this.props.onUpdatedUser?.(result.user);
+      }
     } catch (e) {
       this.setState({ shopError: e?.message ?? "บันทึกข้อมูลร้านไม่สำเร็จ" });
     } finally {
@@ -635,6 +645,8 @@ export class MyShopPage extends React.Component {
     try {
       const editablePayload = {
         name: profileDraft?.name ?? "",
+        firstName: profileDraft?.firstName ?? "",
+        lastName: profileDraft?.lastName ?? "",
         email: profileDraft?.email ?? "",
         phone: profileDraft?.phone ?? "",
         address: profileDraft?.address ?? "",
@@ -1391,6 +1403,25 @@ class ShopSettingsCard extends React.Component {
                 onChange={(e) => onChangeField?.("shopName", e.target.value)}
               />
             </label>
+            <label className="space-y-1">
+              <div className="text-sm text-zinc-600">ชื่อจริง</div>
+              <input
+                className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none"
+                value={shopDraft?.firstName ?? ""}
+                onChange={(e) => onChangeField?.("firstName", e.target.value)}
+                placeholder="ใช้สำหรับตรวจสอบ KYC"
+              />
+            </label>
+            <label className="space-y-1">
+              <div className="text-sm text-zinc-600">นามสกุล</div>
+              <input
+                className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none"
+                value={shopDraft?.lastName ?? ""}
+                onChange={(e) => onChangeField?.("lastName", e.target.value)}
+                placeholder="ใช้สำหรับตรวจสอบ KYC"
+              />
+              <div className="text-xs text-zinc-500">ชื่อจริงและนามสกุลไม่แสดงต่อสาธารณะ ใช้สำหรับตรวจสอบบัญชีธนาคารและ KYC เท่านั้น</div>
+            </label>
 
             <label className="space-y-1">
               <div className="text-sm text-zinc-600">เลขบัตรประชาชน</div>
@@ -1446,6 +1477,7 @@ class ShopSettingsCard extends React.Component {
                 onChange={(e) => onChangeField?.("bankAccountName", e.target.value)}
                 placeholder="ชื่อเจ้าของบัญชี"
               />
+              <div className="text-xs text-zinc-500">ชื่อบัญชีต้องตรงกับชื่อจริงและนามสกุล</div>
             </label>
 
             <label className="space-y-1 md:col-span-2">
