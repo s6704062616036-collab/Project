@@ -117,6 +117,17 @@ const saveUploadedFiles = async (files, options = {}) => {
   );
 };
 
+const deleteUploadedFiles = async (values = []) => {
+  const normalizedValues = Array.isArray(values) ? values.filter(Boolean) : [];
+  if (!normalizedValues.length) return [];
+
+  return Promise.all(
+    normalizedValues.map((value) =>
+      deleteUploadedFile(value).catch(() => false)
+    )
+  );
+};
+
 const getUploadsRoot = () => path.resolve(__dirname, "..", "..", "uploads");
 
 const extractUploadsRelativePath = (value = "") => {
@@ -210,6 +221,7 @@ const deleteUploadedFile = async (value = "") => {
 
 module.exports = {
   deleteUploadedFile,
+  deleteUploadedFiles,
   isCloudStorageEnabled,
   saveUploadedFile,
   saveUploadedFiles,

@@ -4,7 +4,7 @@ const User = require("../models/User");
 const mongoose = require("mongoose");
 const { assertApprovedShopForSelling } = require("../services/shopKycService");
 const { notifyAdmins } = require("../services/notificationService");
-const { deleteUploadedFile, saveUploadedFile, saveUploadedFiles } = require("../services/fileStorageService");
+const { deleteUploadedFile, deleteUploadedFiles, saveUploadedFile, saveUploadedFiles } = require("../services/fileStorageService");
 const serializeUser = require("../utils/serializeUser");
 
 const normalizeProductStatus = (value) => {
@@ -306,6 +306,7 @@ const listParcelPaymentReviews = async (req, res) => {
 };
 
 const createMyProduct = async (req, res) => {
+  let imagePaths = [];
   try {
     await assertApprovedShopForSelling(req.user.id);
 
@@ -319,7 +320,7 @@ const createMyProduct = async (req, res) => {
       });
     }
 
-    const imagePaths = Array.isArray(req.files)
+    imagePaths = Array.isArray(req.files)
       ? await saveUploadedFiles(req.files, { folder: "secondhand/products" })
       : [];
 
@@ -340,6 +341,10 @@ const createMyProduct = async (req, res) => {
       product: mapProduct(product),
     });
   } catch (error) {
+    if (imagePaths.length) {
+      await deleteUploadedFiles(imagePaths);
+    }
+
     if (error.status === 403) {
       return res.status(403).json({
         success: false,
@@ -357,6 +362,7 @@ const createMyProduct = async (req, res) => {
 };
 
 const updateMyProduct = async (req, res) => {
+  let uploadedImages = [];
   try {
     await assertApprovedShopForSelling(req.user.id);
 
@@ -402,11 +408,17 @@ const updateMyProduct = async (req, res) => {
     product.description = nextDescription;
     product.status = normalizeProductStatus(req.body.saleStatus ?? req.body.status ?? product.status);
 
+    const previousImages = Array.isArray(product.images) ? [...product.images] : [];
     if (Array.isArray(req.files) && req.files.length) {
-      product.images = await saveUploadedFiles(req.files, { folder: "secondhand/products" });
+      uploadedImages = await saveUploadedFiles(req.files, { folder: "secondhand/products" });
+      product.images = uploadedImages;
     }
 
     await product.save();
+
+    if (uploadedImages.length && previousImages.length) {
+      await deleteUploadedFiles(previousImages);
+    }
 
     return res.status(200).json({
       success: true,
@@ -414,6 +426,10 @@ const updateMyProduct = async (req, res) => {
       product: mapProduct(product),
     });
   } catch (error) {
+    if (uploadedImages.length) {
+      await deleteUploadedFiles(uploadedImages);
+    }
+
     if (error.status === 403) {
       return res.status(403).json({
         success: false,
@@ -455,7 +471,9 @@ const deleteMyProduct = async (req, res) => {
       });
     }
 
+    const productImages = Array.isArray(product.images) ? [...product.images] : [];
     await Product.findByIdAndDelete(req.params.id);
+    await deleteUploadedFiles(productImages);
 
     return res.status(200).json({
       success: true,

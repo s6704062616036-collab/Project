@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const { getApprovedShopOwnerIds, isApprovedShopKyc } = require("../services/shopKycService");
 const Shop = require("../models/Shop");
 const { assertApprovedShopForSelling } = require("../services/shopKycService");
+const { deleteUploadedFiles } = require("../services/fileStorageService");
 
 const toSellerId = (value) => value?._id?.toString?.() ?? value?.toString?.() ?? `${value ?? ""}`;
 const pickFirstNonEmpty = (...values) => {
@@ -14,12 +15,25 @@ const pickFirstNonEmpty = (...values) => {
   return "";
 };
 
+const areStringArraysEqual = (left = [], right = []) => {
+  if (!Array.isArray(left) || !Array.isArray(right)) return false;
+  if (left.length !== right.length) return false;
+  return left.every((value, index) => `${value ?? ""}` === `${right[index] ?? ""}`);
+};
+
 const mapMarketplaceProduct = (product, shop = null) => {
   if (!product) return null;
 
   const source = typeof product.toObject === "function" ? product.toObject() : product;
   const sellerId = toSellerId(source?.seller);
   const sellerAvatarUrl = source?.seller?.avatarUrl ?? "";
+  const publicSeller =
+    source?.seller && typeof source.seller === "object"
+      ? {
+          id: sellerId,
+          avatarUrl: sellerAvatarUrl,
+        }
+      : sellerId;
 
   return {
     ...source,
@@ -36,7 +50,7 @@ const mapMarketplaceProduct = (product, shop = null) => {
         : source?.imageUrl ?? "",
     imageUrls: Array.isArray(source?.images) ? source.images : source?.imageUrls ?? [],
     saleStatus: source?.status ?? source?.saleStatus ?? "available",
-    seller: source?.seller,
+    seller: publicSeller,
   };
 };
 
@@ -107,7 +121,7 @@ const getAllProducts = async (req, res) => {
     };
 
     const products = await Product.find(query)
-      .populate("seller", "username email phone avatarUrl")
+      .populate("seller", "username avatarUrl")
       .sort({ createdAt: -1 });
     const shops = approvedSellerIds.length
       ? await Shop.find({ owner: { $in: approvedSellerIds } }).lean()
@@ -147,10 +161,7 @@ const getProductById = async (req, res) => {
       });
     }
 
-    const product = await Product.findById(req.params.id).populate(
-      "seller",
-      "username email phone avatarUrl"
-    );
+    const product = await Product.findById(req.params.id).populate("seller", "username avatarUrl");
 
     if (!product) {
       return res.status(404).json({
@@ -232,6 +243,7 @@ const updateProduct = async (req, res) => {
       });
     }
 
+    const previousImages = Array.isArray(product.images) ? [...product.images] : [];
     product.title = req.body.title ?? product.title;
     product.description = req.body.description ?? product.description;
     product.price = req.body.price ?? product.price;
@@ -240,6 +252,14 @@ const updateProduct = async (req, res) => {
     product.status = req.body.status ?? product.status;
 
     await product.save();
+
+    if (
+      Array.isArray(req.body.images) &&
+      req.body.images.length &&
+      !areStringArraysEqual(previousImages, req.body.images)
+    ) {
+      await deleteUploadedFiles(previousImages);
+    }
 
     return res.status(200).json({
       success: true,
@@ -289,7 +309,9 @@ const deleteProduct = async (req, res) => {
       });
     }
 
+    const productImages = Array.isArray(product.images) ? [...product.images] : [];
     await Product.findByIdAndDelete(req.params.id);
+    await deleteUploadedFiles(productImages);
 
     return res.status(200).json({
       success: true,
