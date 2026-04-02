@@ -1628,12 +1628,13 @@ class CreateProductModal extends React.Component {
     } = this.props;
 
     return (
-      <div className="fixed inset-0 z-50 overflow-y-auto bg-black/40 px-4 py-6 sm:px-6 sm:py-8" onClick={onClose}>
+      <div className="fixed inset-0 z-50 overflow-y-auto bg-black/40 px-4 py-3 sm:px-6 sm:py-6" onClick={onClose}>
         <form
-          className="mx-auto my-auto w-full max-w-2xl max-h-[calc(100dvh-3rem)] overflow-y-auto rounded-3xl bg-white shadow p-4 md:p-6 space-y-4"
+          className="mx-auto my-auto flex w-full max-w-2xl max-h-[calc(100dvh-1.5rem)] flex-col overflow-hidden rounded-3xl bg-white p-4 shadow md:p-6"
           onClick={this.stop}
           onSubmit={this.onSubmit}
         >
+          <div className="space-y-4 overflow-y-auto pr-1">
           <div className="flex items-center justify-between">
             <div className="text-xl md:text-2xl font-semibold">เพิ่มสินค้า</div>
             <button
@@ -1743,7 +1744,7 @@ class CreateProductModal extends React.Component {
             <label className="space-y-1 md:col-span-2">
               <div className="text-sm text-zinc-600">คำอธิบายสินค้า</div>
               <textarea
-                className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none min-h-28"
+                className="min-h-24 max-h-40 w-full resize-y rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none"
                 required
                 maxLength={ShopProduct.MAX_DESCRIPTION_LENGTH}
                 placeholder="กรอกรายละเอียดสินค้า"
@@ -1753,8 +1754,9 @@ class CreateProductModal extends React.Component {
               <div className="text-xs text-zinc-400">ไม่เกิน {ShopProduct.MAX_DESCRIPTION_LENGTH} ตัวอักษร</div>
             </label>
           </div>
+          </div>
 
-          <div className="sticky bottom-0 flex justify-end gap-2 border-t border-zinc-100 bg-white pb-2 pt-4">
+          <div className="mt-4 flex justify-end gap-2 border-t border-zinc-100 bg-white pb-1 pt-4 sm:pb-2">
             <button
               type="button"
               className="rounded-xl border border-zinc-200 px-4 py-2 font-medium"
@@ -1802,12 +1804,13 @@ class EditProductModal extends React.Component {
     const existingImageUrls = draftProduct?.getImageUrls?.() ?? [];
 
     return (
-      <div className="fixed inset-0 z-50 overflow-y-auto bg-black/40 px-4 py-6 sm:px-6 sm:py-8" onClick={onClose}>
+      <div className="fixed inset-0 z-50 overflow-y-auto bg-black/40 px-4 py-3 sm:px-6 sm:py-6" onClick={onClose}>
         <form
-          className="mx-auto my-auto w-full max-w-2xl max-h-[calc(100dvh-3rem)] overflow-y-auto rounded-3xl bg-white shadow p-4 md:p-6 space-y-4"
+          className="mx-auto my-auto flex w-full max-w-2xl max-h-[calc(100dvh-1.5rem)] flex-col overflow-hidden rounded-3xl bg-white p-4 shadow md:p-6"
           onClick={this.stop}
           onSubmit={this.onSubmit}
         >
+          <div className="space-y-4 overflow-y-auto pr-1">
           <div className="flex items-center justify-between">
             <div className="text-xl md:text-2xl font-semibold">แก้ไขสินค้า</div>
             <button
@@ -1930,7 +1933,7 @@ class EditProductModal extends React.Component {
             <label className="space-y-1 md:col-span-2">
               <div className="text-sm text-zinc-600">คำอธิบายสินค้า</div>
               <textarea
-                className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none min-h-28"
+                className="min-h-24 max-h-40 w-full resize-y rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none"
                 required
                 maxLength={ShopProduct.MAX_DESCRIPTION_LENGTH}
                 placeholder="กรอกรายละเอียดสินค้า"
@@ -1940,8 +1943,9 @@ class EditProductModal extends React.Component {
               <div className="text-xs text-zinc-400">ไม่เกิน {ShopProduct.MAX_DESCRIPTION_LENGTH} ตัวอักษร</div>
             </label>
           </div>
+          </div>
 
-          <div className="sticky bottom-0 flex justify-end gap-2 border-t border-zinc-100 bg-white pb-2 pt-4">
+          <div className="mt-4 flex justify-end gap-2 border-t border-zinc-100 bg-white pb-1 pt-4 sm:pb-2">
             <button
               type="button"
               className="rounded-xl border border-zinc-200 px-4 py-2 font-medium"
