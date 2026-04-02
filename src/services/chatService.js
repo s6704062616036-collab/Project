@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const Chat = require("../models/Chat");
 const Order = require("../models/Order");
 const Product = require("../models/Product");
+const Shop = require("../models/Shop");
 const User = require("../models/User");
 const { createNotification } = require("./notificationService");
 const { mapChatMessage, mapChatRoom } = require("../utils/chatMapper");
@@ -75,6 +76,14 @@ const buildUsersById = async (userIds = []) => {
   return new Map(users.map((user) => [user._id.toString(), user]));
 };
 
+const buildShopsByOwnerId = async (ownerIds = []) => {
+  const normalizedOwnerIds = [...new Set((Array.isArray(ownerIds) ? ownerIds : []).map((id) => `${id ?? ""}`).filter(Boolean))];
+  if (!normalizedOwnerIds.length) return new Map();
+
+  const shops = await Shop.find({ owner: { $in: normalizedOwnerIds } }).lean();
+  return new Map(shops.map((shop) => [shop.owner?.toString?.() ?? `${shop.owner ?? ""}`, shop]));
+};
+
 const assertChatAccess = (chat, userId) => {
   if (!chat) {
     throw makeHttpError(404, "Chat not found");
@@ -92,12 +101,13 @@ const getChatContext = async (chatId) => {
   const chat = await Chat.findById(chatId);
   if (!chat) return null;
 
-  const [product, usersById] = await Promise.all([
+  const [product, usersById, shopsByOwnerId] = await Promise.all([
     Product.findById(chat.productId).lean(),
     buildUsersById([chat.ownerId, chat.buyerId, ...(chat.messages ?? []).map((message) => message.senderId)]),
+    buildShopsByOwnerId([chat.ownerId]),
   ]);
 
-  return { chat, product, usersById };
+  return { chat, product, usersById, shopsByOwnerId };
 };
 
 const findShopOrderForMeetupChat = (order, ownerId) =>
@@ -253,7 +263,10 @@ const listMyChats = async ({ req, userId }) => {
     chat.buyerId,
     ...(Array.isArray(chat.messages) ? chat.messages.map((message) => message.senderId) : []),
   ]);
-  const usersById = await buildUsersById(userIds);
+  const [usersById, shopsByOwnerId] = await Promise.all([
+    buildUsersById(userIds),
+    buildShopsByOwnerId(chats.map((chat) => chat.ownerId)),
+  ]);
   const baseUrl = getApiBaseUrl(req);
 
   return chats.map((chat) =>
@@ -265,6 +278,7 @@ const listMyChats = async ({ req, userId }) => {
       {
         currentUserId: userId,
         usersById,
+        shopsByOwnerId,
         product: productsById.get(chat.productId?.toString?.() ?? `${chat.productId ?? ""}`) ?? null,
         baseUrl,
       },
@@ -296,6 +310,7 @@ const listMessages = async ({ req, userId, chatId }) => {
     {
       currentUserId: userId,
       usersById: context.usersById,
+      shopsByOwnerId: context.shopsByOwnerId,
       product: context.product,
       baseUrl,
     },
@@ -303,6 +318,7 @@ const listMessages = async ({ req, userId, chatId }) => {
   const messages = (context.chat.messages ?? []).map((message) =>
     mapChatMessage(context.chat, message, {
       usersById: context.usersById,
+      shopsByOwnerId: context.shopsByOwnerId,
       baseUrl,
     })
   );
@@ -348,7 +364,10 @@ const startChat = async ({ req, userId, productId, ownerId, message }) => {
     await chat.save();
   }
 
-  const usersById = await buildUsersById([chat.ownerId, chat.buyerId, ...(chat.messages ?? []).map((item) => item.senderId)]);
+  const [usersById, shopsByOwnerId] = await Promise.all([
+    buildUsersById([chat.ownerId, chat.buyerId, ...(chat.messages ?? []).map((item) => item.senderId)]),
+    buildShopsByOwnerId([chat.ownerId]),
+  ]);
   const baseUrl = getApiBaseUrl(req);
 
   return {
@@ -356,6 +375,7 @@ const startChat = async ({ req, userId, productId, ownerId, message }) => {
     chat: mapChatRoom(chat, {
       currentUserId: userId,
       usersById,
+      shopsByOwnerId,
       product,
       baseUrl,
     }),
@@ -395,18 +415,23 @@ const sendMessage = async ({ req, userId, chatId, text, imageUrl, videoUrl }) =>
   updateReadMarkerOnChat(context.chat, userId, createdMessage?.createdAt);
   await context.chat.save();
 
-  const usersById = await buildUsersById([context.chat.ownerId, context.chat.buyerId, ...(context.chat.messages ?? []).map((item) => item.senderId)]);
+  const [usersById, shopsByOwnerId] = await Promise.all([
+    buildUsersById([context.chat.ownerId, context.chat.buyerId, ...(context.chat.messages ?? []).map((item) => item.senderId)]),
+    buildShopsByOwnerId([context.chat.ownerId]),
+  ]);
   const baseUrl = getApiBaseUrl(req);
 
   return {
     chat: mapChatRoom(context.chat, {
       currentUserId: userId,
       usersById,
+      shopsByOwnerId,
       product: context.product,
       baseUrl,
     }),
     message: mapChatMessage(context.chat, createdMessage, {
       usersById,
+      shopsByOwnerId,
       baseUrl,
     }),
   };
@@ -622,18 +647,23 @@ const respondMeetupProposal = async ({ req, userId, chatId, messageId, action, l
     },
   });
 
-  const usersById = await buildUsersById([chat.ownerId, chat.buyerId, ...(chat.messages ?? []).map((item) => item.senderId)]);
+  const [usersById, shopsByOwnerId] = await Promise.all([
+    buildUsersById([chat.ownerId, chat.buyerId, ...(chat.messages ?? []).map((item) => item.senderId)]),
+    buildShopsByOwnerId([chat.ownerId]),
+  ]);
   const baseUrl = getApiBaseUrl(req);
 
   return {
     chat: mapChatRoom(chat, {
       currentUserId: userId,
       usersById,
+      shopsByOwnerId,
       product: context.product,
       baseUrl,
     }),
     message: mapChatMessage(chat, proposalMessage, {
       usersById,
+      shopsByOwnerId,
       baseUrl,
     }),
   };
@@ -724,18 +754,23 @@ const confirmMeetupHandover = async ({ req, userId, chatId, messageId }) => {
     },
   });
 
-  const usersById = await buildUsersById([chat.ownerId, chat.buyerId, ...(chat.messages ?? []).map((item) => item.senderId)]);
+  const [usersById, shopsByOwnerId] = await Promise.all([
+    buildUsersById([chat.ownerId, chat.buyerId, ...(chat.messages ?? []).map((item) => item.senderId)]),
+    buildShopsByOwnerId([chat.ownerId]),
+  ]);
   const baseUrl = getApiBaseUrl(req);
 
   return {
     chat: mapChatRoom(chat, {
       currentUserId: userId,
       usersById,
+      shopsByOwnerId,
       product: context.product,
       baseUrl,
     }),
     message: mapChatMessage(chat, proposalMessage, {
       usersById,
+      shopsByOwnerId,
       baseUrl,
     }),
   };

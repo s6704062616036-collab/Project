@@ -13,17 +13,42 @@ const toAbsoluteUrl = (value, baseUrl) => {
   return normalizedValue;
 };
 
-const mapChatMessage = (chat, message, { usersById = new Map(), baseUrl } = {}) => {
+const safeText = (value) => `${value ?? ""}`.trim();
+
+const getShopNameByOwnerId = (shopsByOwnerId, ownerId) => {
+  if (!(shopsByOwnerId instanceof Map)) return "";
+  const normalizedOwnerId = safeText(ownerId);
+  if (!normalizedOwnerId) return "";
+
+  const shop = shopsByOwnerId.get(normalizedOwnerId) ?? null;
+  return safeText(shop?.shopName);
+};
+
+const getPublicUserName = (user, { ownerId = "", shopsByOwnerId } = {}) => {
+  const shopName = getShopNameByOwnerId(
+    shopsByOwnerId,
+    ownerId || user?._id?.toString?.() || user?.id || "",
+  );
+  if (shopName) return shopName;
+  return safeText(user?.name) || safeText(user?.username) || "User";
+};
+
+const mapChatMessage = (chat, message, { usersById = new Map(), shopsByOwnerId = new Map(), baseUrl } = {}) => {
   if (!chat || !message) return null;
 
   const senderId = message?.senderId?.toString?.() ?? `${message?.senderId ?? ""}`;
   const sender = usersById.get(senderId) ?? null;
+  const ownerId = chat?.ownerId?.toString?.() ?? `${chat?.ownerId ?? ""}`;
+  const senderName =
+    senderId && senderId === ownerId
+      ? getPublicUserName(sender, { ownerId, shopsByOwnerId })
+      : getPublicUserName(sender);
 
   return {
     id: message?._id?.toString?.() ?? "",
     chatId: chat?._id?.toString?.() ?? "",
     senderId,
-    senderName: sender?.name ?? sender?.username ?? "User",
+    senderName,
     senderAvatarUrl: toAbsoluteUrl(sender?.avatarUrl, baseUrl),
     type: message?.type ?? "text",
     orderId: message?.orderId?.toString?.() ?? `${message?.orderId ?? ""}`,
@@ -45,7 +70,10 @@ const mapChatMessage = (chat, message, { usersById = new Map(), baseUrl } = {}) 
   };
 };
 
-const mapChatRoom = (chat, { currentUserId = "", usersById = new Map(), product = null, baseUrl } = {}) => {
+const mapChatRoom = (
+  chat,
+  { currentUserId = "", usersById = new Map(), shopsByOwnerId = new Map(), product = null, baseUrl } = {},
+) => {
   if (!chat) return null;
 
   const ownerId = chat?.ownerId?.toString?.() ?? `${chat?.ownerId ?? ""}`;
@@ -59,8 +87,14 @@ const mapChatRoom = (chat, { currentUserId = "", usersById = new Map(), product 
 
   const messages = Array.isArray(chat?.messages) ? chat.messages : [];
   const lastMessage = messages.length
-    ? mapChatMessage(chat, messages[messages.length - 1], { usersById, baseUrl })
+    ? mapChatMessage(chat, messages[messages.length - 1], { usersById, shopsByOwnerId, baseUrl })
     : null;
+  const ownerDisplayName = getPublicUserName(owner, { ownerId, shopsByOwnerId }) || "Seller";
+  const buyerDisplayName = getPublicUserName(buyer) || "Buyer";
+  const counterpartDisplayName =
+    counterpart && safeText(counterpart?._id?.toString?.() ?? counterpart?.id) === ownerId
+      ? ownerDisplayName
+      : buyerDisplayName;
 
   return {
     id: chat?._id?.toString?.() ?? "",
@@ -69,13 +103,13 @@ const mapChatRoom = (chat, { currentUserId = "", usersById = new Map(), product 
     ownerId,
     buyerId,
     sellerId: ownerId,
-    sellerName: owner?.name ?? owner?.username ?? "Seller",
+    sellerName: ownerDisplayName,
     sellerAvatarUrl: toAbsoluteUrl(owner?.avatarUrl, baseUrl),
     counterpartId: counterpart?._id?.toString?.() ?? counterpart?.id ?? "",
-    counterpartName: counterpart?.name ?? counterpart?.username ?? "Seller",
+    counterpartName: counterpartDisplayName,
     counterpartAvatarUrl: toAbsoluteUrl(counterpart?.avatarUrl, baseUrl),
-    ownerName: owner?.name ?? owner?.username ?? "",
-    buyerName: buyer?.name ?? buyer?.username ?? "",
+    ownerName: ownerDisplayName,
+    buyerName: buyerDisplayName,
     unreadCount: Number.isFinite(Number(chat?.unreadCount)) ? Number(chat.unreadCount) : 0,
     createdAt: chat?.createdAt ?? null,
     updatedAt: chat?.updatedAt ?? chat?.createdAt ?? null,
