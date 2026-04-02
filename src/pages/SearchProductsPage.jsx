@@ -580,7 +580,9 @@ class EditProfileModal extends React.Component {
           <div className="space-y-3">
             <div className="text-2xl font-semibold text-zinc-800">ข้อมูลบัญชี</div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <Field label="ชื่อที่แสดง" value={user?.name} onChange={(v) => onChangeField("name", v)} />
+              <Field label="ชื่อจริง" value={user?.firstName} onChange={(v) => onChangeField("firstName", v)} />
+              <Field label="นามสกุล" value={user?.lastName} onChange={(v) => onChangeField("lastName", v)} />
+              <Field label="ชื่อแสดง (สาธารณะ)" value={user?.name} onChange={(v) => onChangeField("name", v)} />
               <Field label="อีเมล" value={user?.email} onChange={(v) => onChangeField("email", v)} />
               <Field label="เบอร์โทร" value={user?.phone} onChange={(v) => onChangeField("phone", v)} />
               <Field label="ที่อยู่" value={user?.address} onChange={(v) => onChangeField("address", v)} full />
@@ -589,11 +591,6 @@ class EditProfileModal extends React.Component {
 
           <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
             ชื่อจริงและนามสกุลไม่แสดงต่อสาธารณะ ใช้สำหรับ KYC และตรวจสอบความตรงกันกับชื่อบัญชีธนาคารเท่านั้น
-          </div>
-
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            <Field label="ชื่อจริง" value={user?.firstName} onChange={(v) => onChangeField("firstName", v)} />
-            <Field label="นามสกุล" value={user?.lastName} onChange={(v) => onChangeField("lastName", v)} />
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -694,7 +691,9 @@ class MultiAddressEditProfileModal extends React.Component {
           <div className="space-y-3">
             <div className="text-2xl font-semibold text-zinc-800">ข้อมูลบัญชี</div>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <Field label="ชื่อที่แสดง" value={user?.name} onChange={(v) => onChangeField("name", v)} />
+              <Field label="ชื่อจริง" value={user?.firstName} onChange={(v) => onChangeField("firstName", v)} />
+              <Field label="นามสกุล" value={user?.lastName} onChange={(v) => onChangeField("lastName", v)} />
+              <Field label="ชื่อแสดง (สาธารณะ)" value={user?.name} onChange={(v) => onChangeField("name", v)} />
               <Field label="อีเมล" value={user?.email} onChange={(v) => onChangeField("email", v)} />
               <Field label="เบอร์โทร" value={user?.phone} onChange={(v) => onChangeField("phone", v)} />
             </div>
@@ -702,11 +701,6 @@ class MultiAddressEditProfileModal extends React.Component {
 
           <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
             ชื่อจริงและนามสกุลไม่แสดงต่อสาธารณะ ใช้สำหรับ KYC และตรวจสอบความตรงกันกับชื่อบัญชีธนาคารเท่านั้น
-          </div>
-
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            <Field label="ชื่อจริง" value={user?.firstName} onChange={(v) => onChangeField("firstName", v)} />
-            <Field label="นามสกุล" value={user?.lastName} onChange={(v) => onChangeField("lastName", v)} />
           </div>
 
           <SavedAddressesEditor
