@@ -113,6 +113,7 @@ const upsertMyShop = async (req, res) => {
       shopName,
       citizenId,
       kycCitizenId,
+      submissionAction,
       firstName,
       lastName,
       birthDate,
@@ -130,6 +131,8 @@ const upsertMyShop = async (req, res) => {
       ? await saveUploadedFile(req.file, { folder: "secondhand/shops/qr" })
       : undefined;
     const normalizedCitizenId = `${citizenId ?? kycCitizenId ?? ""}`.replace(/\D+/g, "").slice(0, 13);
+    const normalizedSubmissionAction = `${submissionAction ?? ""}`.trim().toLowerCase();
+    const explicitKycSubmissionRequested = normalizedSubmissionAction === "submit_kyc_review";
     const normalizedFirstName = normalizeLegalName(firstName);
     const normalizedLastName = normalizeLegalName(lastName);
     const normalizedBirthDate = normalizeBirthDate(birthDate);
@@ -172,7 +175,12 @@ const upsertMyShop = async (req, res) => {
         nextKycReviewedAt = null;
         nextKycApprovedAt = null;
         nextModerationNote = "";
-      } else if (!existingShop || hasEvidenceChanged || !["pending", "approved", "rejected"].includes(existingShop?.kycStatus)) {
+      } else if (
+        explicitKycSubmissionRequested ||
+        !existingShop ||
+        hasEvidenceChanged ||
+        !["pending", "approved", "rejected"].includes(existingShop?.kycStatus)
+      ) {
         nextKycStatus = "pending";
         nextKycSubmittedAt = new Date();
         nextKycReviewedAt = null;
@@ -221,7 +229,8 @@ const upsertMyShop = async (req, res) => {
 
       shouldNotifyAdmins =
         nextKycStatus === "pending" &&
-        (!existingShop ||
+        (explicitKycSubmissionRequested ||
+          !existingShop ||
           hasEvidenceChanged ||
           `${existingShop?.kycStatus ?? ""}`.trim().toLowerCase() !== "pending");
     });
