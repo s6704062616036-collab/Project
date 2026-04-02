@@ -217,6 +217,54 @@ const getMe = async (req, res) => {
   }
 };
 
+const resetPassword = async (req, res) => {
+  try {
+    const email = normalizeEmail(req.body.email);
+    const phone = normalizeLoginIdentifier(req.body.phone);
+    const password = `${req.body.password ?? ""}`;
+
+    if (!email || !phone || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "Please provide email, phone and new password"
+      });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: "Password must be at least 6 characters"
+      });
+    }
+
+    const user = await User.findOne({
+      email,
+      phone
+    });
+
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message: "User not found for the provided email and phone"
+      });
+    }
+
+    user.password = await bcrypt.hash(password, 10);
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Password reset successful"
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Server error during password reset",
+      error: error.message
+    });
+  }
+};
+
 const logout = async (req, res) => {
   return res.status(200).json({
     success: true,
@@ -227,6 +275,7 @@ const logout = async (req, res) => {
 module.exports = {
   register,
   login,
+  resetPassword,
   getMe,
   logout
 };
