@@ -30,6 +30,21 @@ export class SellerStorefrontPage extends React.Component {
 
   sellerStorefrontService = SellerStorefrontService.instance();
   cartService = CartService.instance();
+
+  isAuthenticated = () =>
+    Boolean(this.props.user?.id || this.props.user?._id || this.props.user?.email);
+
+  promptGuestLogin = () => {
+    this.setState({
+      showProfilePopup: true,
+      showCartPopup: false,
+      cartError: "กรุณาเข้าสู่ระบบก่อนสั่งซื้อหรือเพิ่มสินค้าในตะกร้า",
+      cartDone: "",
+      cartItems: [],
+      cartLoading: false,
+      checkingOut: false,
+    });
+  };
   contentReportService = ContentReportService.instance();
 
   componentDidMount() {
@@ -174,6 +189,10 @@ export class SellerStorefrontPage extends React.Component {
   };
 
   openCartPopup = async () => {
+    if (!this.isAuthenticated()) {
+      this.promptGuestLogin();
+      return;
+    }
     this.setState({
       showCartPopup: true,
       showProfilePopup: false,
@@ -188,6 +207,10 @@ export class SellerStorefrontPage extends React.Component {
   };
 
   loadCartItems = async () => {
+    if (!this.isAuthenticated()) {
+      this.setState({ cartItems: [], cartLoading: false, cartError: "" });
+      return;
+    }
     this.setState({ cartLoading: true, cartError: "" });
     try {
       const { items } = await this.cartService.listMyCart();
@@ -219,6 +242,10 @@ export class SellerStorefrontPage extends React.Component {
 
   checkoutCart = async (checkoutPayload = {}) => {
     if (!this.state.cartItems.length) return;
+    if (!this.isAuthenticated()) {
+      this.promptGuestLogin();
+      return;
+    }
 
     this.setState({ checkingOut: true, cartError: "", cartDone: "" });
     try {

@@ -52,6 +52,24 @@ export class ProductDetailPage extends React.Component {
     this.loadCartItems();
   }
 
+  isAuthenticated = () =>
+    Boolean(this.props.user?.id || this.props.user?._id || this.props.user?.email);
+
+  promptGuestLogin = ({ target = "action" } = {}) => {
+    const message = "กรุณาเข้าสู่ระบบก่อนสั่งซื้อหรือเพิ่มสินค้าในตะกร้า";
+    this.setState({
+      showProfilePopup: true,
+      showCartPopup: false,
+      actionDone: "",
+      cartDone: "",
+      actionError: target === "action" ? message : "",
+      cartError: target === "cart" ? message : "",
+      cartItems: target === "cart" ? [] : this.state.cartItems,
+      cartLoading: false,
+      checkingOut: false,
+    });
+  };
+
   componentDidUpdate(prevProps) {
     const prevProductId = this.getProductId(prevProps.product);
     const nextProductId = this.getProductId(this.props.product);
@@ -281,6 +299,10 @@ export class ProductDetailPage extends React.Component {
     const product = this.getResolvedProduct();
     const currentUserId = `${this.props.user?.id ?? ""}`.trim();
     const ownerId = `${product?.ownerId ?? ""}`.trim();
+    if (!this.isAuthenticated()) {
+      this.promptGuestLogin({ target: "action" });
+      return;
+    }
     if (!product?.id) {
       this.setState({ actionError: "ไม่พบรหัสสินค้า จึงยังเพิ่มลงตะกร้าไม่ได้", actionDone: "" });
       return;
@@ -444,6 +466,10 @@ export class ProductDetailPage extends React.Component {
   };
 
   openCartPopup = async () => {
+    if (!this.isAuthenticated()) {
+      this.promptGuestLogin({ target: "cart" });
+      return;
+    }
     this.setState({
       showCartPopup: true,
       showProfilePopup: false,
@@ -458,6 +484,10 @@ export class ProductDetailPage extends React.Component {
   };
 
   loadCartItems = async () => {
+    if (!this.isAuthenticated()) {
+      this.setState({ cartItems: [], cartLoading: false, cartError: "" });
+      return;
+    }
     this.setState({ cartLoading: true, cartError: "" });
     try {
       const { items } = await this.cartService.listMyCart();
@@ -489,6 +519,10 @@ export class ProductDetailPage extends React.Component {
 
   checkoutCart = async (checkoutPayload = {}) => {
     if (!this.state.cartItems.length) return;
+    if (!this.isAuthenticated()) {
+      this.promptGuestLogin({ target: "cart" });
+      return;
+    }
 
     this.setState({ checkingOut: true, cartError: "", cartDone: "" });
     try {

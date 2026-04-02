@@ -10,6 +10,22 @@ class ApiHttpTransport {
     this.jsonHeaders = { "Content-Type": "application/json" };
   }
 
+  normalizeErrorMessage(message, status) {
+    const safeMessage = `${message ?? ""}`.trim();
+    const normalized = safeMessage.toLowerCase();
+
+    if (
+      status === 401 ||
+      normalized.includes("not authorized") ||
+      normalized.includes("no token") ||
+      normalized.includes("unauthorized")
+    ) {
+      return "กรุณาเข้าสู่ระบบก่อนใช้งาน";
+    }
+
+    return safeMessage || "Request failed";
+  }
+
   buildRequestUrl(path) {
     const normalizedBaseUrl = `${this.baseUrl ?? ""}`.replace(/\/+$/, "");
     const normalizedPath = `${path ?? ""}`;
@@ -70,10 +86,10 @@ class ApiHttpTransport {
     const data = isJson ? await res.json().catch(() => null) : await res.text();
 
     if (!res.ok) {
-      const msg =
+      const rawMessage =
         (data && typeof data === "object" && data.message) ||
         (typeof data === "string" ? data : "Request failed");
-      throw new Error(msg);
+      throw new Error(this.normalizeErrorMessage(rawMessage, res.status));
     }
 
     return data;
