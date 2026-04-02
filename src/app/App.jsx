@@ -23,7 +23,7 @@ const ADMIN_CONTACT_PHONE = "0822062469";
 
 export default class App extends React.Component {
   state = {
-    route: "login",
+    route: "home",
     user: null,
     selectedProduct: null,
     selectedSellerOwnerId: "",
@@ -50,6 +50,7 @@ export default class App extends React.Component {
     databasePollIntervalMs: 5000,
   });
   appRoutes = new Set(["login", "forgot-password", "register", "home", "myshop", "product", "seller", "profile", "search", "chat", "orders", "admin", "notifications"]);
+  publicGuestRoutes = new Set(["home", "product", "seller", "profile", "search", "login", "forgot-password", "register"]);
   chatUnreadRefreshInFlight = false;
   pendingChatUnreadRefresh = false;
   notificationUnreadRefreshInFlight = false;
@@ -124,7 +125,7 @@ export default class App extends React.Component {
     }
 
     if (!isAdmin && this.state.route === "admin") {
-      this.navigate(user ? "home" : "login", { replace: true });
+      this.navigate("home", { replace: true });
     }
   }
 
@@ -295,7 +296,7 @@ export default class App extends React.Component {
   // ✅ HomePage เรียกกลับมาเมื่อแก้โปรไฟล์สำเร็จ
   onUpdatedUser = (user) => this.setState({ user });
   onDeletedAccount = () =>
-    this.navigate("login", {
+    this.navigate("home", {
       patch: {
         user: null,
         selectedProduct: null,
@@ -472,7 +473,7 @@ export default class App extends React.Component {
     try {
       await this.auth.logout?.();
     } finally {
-      this.navigate("login", {
+      this.navigate("home", {
         patch: {
           user: null,
           selectedProduct: null,
@@ -516,7 +517,7 @@ export default class App extends React.Component {
     if (booting) return null;
 
     // guard (ป้องกันผู้ใช้ที่ยังไม่ login เข้าหน้าในระบบผ่าน browser back)
-    if (!user && !["login", "forgot-password", "register"].includes(route)) {
+    if (!user && !this.publicGuestRoutes.has(route)) {
       return this.renderWithDataModeSwitch(
         <LoginPage
           onGoRegister={() => this.go("register")}
