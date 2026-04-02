@@ -173,20 +173,22 @@ export class PublicUserProfilePage extends React.Component {
                 </div>
               </section>
 
-              <section className="grid gap-4 md:grid-cols-2">
-                <div className="rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm">
-                  <div className="text-xs font-medium uppercase tracking-[0.12em] text-zinc-500">เบอร์โทร</div>
-                  <div className="mt-2 text-sm font-medium text-zinc-800 break-all">
-                    {contactPhone || "ยังไม่ได้ระบุ"}
+              {isCurrentUser ? (
+                <section className="grid gap-4 md:grid-cols-2">
+                  <div className="rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm">
+                    <div className="text-xs font-medium uppercase tracking-[0.12em] text-zinc-500">เบอร์โทร</div>
+                    <div className="mt-2 text-sm font-medium text-zinc-800 break-all">
+                      {contactPhone || "ยังไม่ได้ระบุ"}
+                    </div>
                   </div>
-                </div>
-                <div className="rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm">
-                  <div className="text-xs font-medium uppercase tracking-[0.12em] text-zinc-500">อีเมล</div>
-                  <div className="mt-2 text-sm font-medium text-zinc-800 break-all">
-                    {contactEmail || "ยังไม่ได้ระบุ"}
+                  <div className="rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm">
+                    <div className="text-xs font-medium uppercase tracking-[0.12em] text-zinc-500">อีเมล</div>
+                    <div className="mt-2 text-sm font-medium text-zinc-800 break-all">
+                      {contactEmail || "ยังไม่ได้ระบุ"}
+                    </div>
                   </div>
-                </div>
-              </section>
+                </section>
+              ) : null}
 
               {profile.hasShop() ? (
                 <section className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
