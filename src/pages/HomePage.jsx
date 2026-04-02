@@ -624,9 +624,9 @@ class EditProfileModal extends React.Component {
           <div className="space-y-3">
             <div className="text-2xl font-semibold text-zinc-800">ข้อมูลบัญชี</div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <Field label="ชื่อแสดง (สาธารณะ)" value={user?.name} onChange={(v) => onChangeField("name", v)} />
               <Field label="ชื่อจริง" value={user?.firstName} onChange={(v) => onChangeField("firstName", v)} />
               <Field label="นามสกุล" value={user?.lastName} onChange={(v) => onChangeField("lastName", v)} />
-              <Field label="ชื่อแสดง (สาธารณะ)" value={user?.name} onChange={(v) => onChangeField("name", v)} />
               <Field label="อีเมล" value={user?.email} onChange={(v) => onChangeField("email", v)} />
               <Field label="เบอร์โทร" value={user?.phone} onChange={(v) => onChangeField("phone", v)} />
               <Field label="ที่อยู่" value={user?.address} onChange={(v) => onChangeField("address", v)} full />
@@ -735,9 +735,9 @@ class MultiAddressEditProfileModal extends React.Component {
           <div className="space-y-3">
             <div className="text-2xl font-semibold text-zinc-800">ข้อมูลบัญชี</div>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <Field label="ชื่อแสดง (สาธารณะ)" value={user?.name} onChange={(v) => onChangeField("name", v)} />
               <Field label="ชื่อจริง" value={user?.firstName} onChange={(v) => onChangeField("firstName", v)} />
               <Field label="นามสกุล" value={user?.lastName} onChange={(v) => onChangeField("lastName", v)} />
-              <Field label="ชื่อแสดง (สาธารณะ)" value={user?.name} onChange={(v) => onChangeField("name", v)} />
               <Field label="อีเมล" value={user?.email} onChange={(v) => onChangeField("email", v)} />
               <Field label="เบอร์โทร" value={user?.phone} onChange={(v) => onChangeField("phone", v)} />
             </div>
