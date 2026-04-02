@@ -12,6 +12,12 @@ import {
   ShopParcelPaymentVerificationModal,
   ShopParcelPaymentVerificationPanel,
 } from "../components/ShopParcelPaymentVerification";
+import {
+  ADMIN_CONTACT_EMAIL as SHARED_ADMIN_CONTACT_EMAIL,
+  BANK_OPTIONS as SHARED_BANK_OPTIONS,
+  PROVINCE_OPTIONS as SHARED_PROVINCE_OPTIONS,
+  getShopKycBadgeClassName as getSharedShopKycBadgeClassName,
+} from "./myshop/MyShopPageShared";
 
 const CloseCircleIcon = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" className="h-5 w-5">
@@ -1244,19 +1250,6 @@ export class MyShopPage extends React.Component {
   }
 }
 
-const getShopKycBadgeClassName = (status) => {
-  switch (`${status ?? ""}`.trim()) {
-    case "approved":
-      return "border-emerald-200 bg-emerald-50 text-emerald-700";
-    case "rejected":
-      return "border-red-200 bg-red-50 text-red-700";
-    case "pending":
-      return "border-amber-200 bg-amber-50 text-amber-700";
-    default:
-      return "border-zinc-200 bg-zinc-100 text-zinc-700";
-  }
-};
-
 class ShopSettingsCard extends React.Component {
   render() {
     const {
@@ -1280,12 +1273,12 @@ class ShopSettingsCard extends React.Component {
       "";
     const citizenIdLocked = shopMeta?.isCitizenIdLocked?.() ?? false;
     const canDirectSave = shopMeta?.canDirectSave?.({ hasNewQrFile: Boolean(qrFile) }) ?? false;
-    const bankOptions = BANK_OPTIONS.includes(shopDraft?.bankName ?? "")
-      ? BANK_OPTIONS
-      : [...BANK_OPTIONS, shopDraft?.bankName ?? ""].filter(Boolean);
-    const provinceOptions = PROVINCE_OPTIONS.includes(shopDraft?.province ?? "")
-      ? PROVINCE_OPTIONS
-      : [...PROVINCE_OPTIONS, shopDraft?.province ?? ""].filter(Boolean);
+    const bankOptions = SHARED_BANK_OPTIONS.includes(shopDraft?.bankName ?? "")
+      ? SHARED_BANK_OPTIONS
+      : [...SHARED_BANK_OPTIONS, shopDraft?.bankName ?? ""].filter(Boolean);
+    const provinceOptions = SHARED_PROVINCE_OPTIONS.includes(shopDraft?.province ?? "")
+      ? SHARED_PROVINCE_OPTIONS
+      : [...SHARED_PROVINCE_OPTIONS, shopDraft?.province ?? ""].filter(Boolean);
     const actionLabel = canDirectSave
       ? "บันทึกข้อมูลร้าน"
       : shopMeta?.hasPendingSubmission?.()
@@ -1323,7 +1316,7 @@ class ShopSettingsCard extends React.Component {
         </div>
 
         <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
-          <div className={`rounded-full border px-2.5 py-1 ${getShopKycBadgeClassName(shopMeta?.kycStatus)}`}>
+          <div className={`rounded-full border px-2.5 py-1 ${getSharedShopKycBadgeClassName(shopMeta?.kycStatus)}`}>
             สถานะ KYC: {shopMeta?.getKycStatusLabel?.() ?? "ยังไม่ส่งตรวจ"}
           </div>
           {shopMeta?.kycSubmittedAt ? (
@@ -1347,10 +1340,10 @@ class ShopSettingsCard extends React.Component {
           <span className="font-semibold text-zinc-900">ติดต่อ Admin:</span>{" "}
           หากมีปัญหาเรื่องการตรวจสอบ KYC หรือข้อมูลร้านค้า สามารถติดต่อได้ที่{" "}
           <a
-            href={`mailto:${ADMIN_CONTACT_EMAIL}`}
+            href={`mailto:${SHARED_ADMIN_CONTACT_EMAIL}`}
             className="font-semibold text-amber-700 underline decoration-amber-400 underline-offset-2"
           >
-            {ADMIN_CONTACT_EMAIL}
+            {SHARED_ADMIN_CONTACT_EMAIL}
           </a>
         </div>
 
@@ -1635,9 +1628,9 @@ class CreateProductModal extends React.Component {
     } = this.props;
 
     return (
-      <div className="fixed inset-0 z-50 bg-black/40 grid place-items-center p-4" onClick={onClose}>
+      <div className="fixed inset-0 z-50 overflow-y-auto bg-black/40 px-4 py-6 sm:px-6 sm:py-8" onClick={onClose}>
         <form
-          className="w-full max-w-2xl rounded-3xl bg-white shadow p-4 md:p-6 space-y-4"
+          className="mx-auto my-auto w-full max-w-2xl max-h-[calc(100dvh-3rem)] overflow-y-auto rounded-3xl bg-white shadow p-4 md:p-6 space-y-4"
           onClick={this.stop}
           onSubmit={this.onSubmit}
         >
@@ -1761,7 +1754,7 @@ class CreateProductModal extends React.Component {
             </label>
           </div>
 
-          <div className="flex justify-end gap-2">
+          <div className="sticky bottom-0 flex justify-end gap-2 border-t border-zinc-100 bg-white pb-2 pt-4">
             <button
               type="button"
               className="rounded-xl border border-zinc-200 px-4 py-2 font-medium"
@@ -1809,9 +1802,9 @@ class EditProductModal extends React.Component {
     const existingImageUrls = draftProduct?.getImageUrls?.() ?? [];
 
     return (
-      <div className="fixed inset-0 z-50 bg-black/40 grid place-items-center p-4" onClick={onClose}>
+      <div className="fixed inset-0 z-50 overflow-y-auto bg-black/40 px-4 py-6 sm:px-6 sm:py-8" onClick={onClose}>
         <form
-          className="w-full max-w-2xl rounded-3xl bg-white shadow p-4 md:p-6 space-y-4"
+          className="mx-auto my-auto w-full max-w-2xl max-h-[calc(100dvh-3rem)] overflow-y-auto rounded-3xl bg-white shadow p-4 md:p-6 space-y-4"
           onClick={this.stop}
           onSubmit={this.onSubmit}
         >
@@ -1948,7 +1941,7 @@ class EditProductModal extends React.Component {
             </label>
           </div>
 
-          <div className="flex justify-end gap-2">
+          <div className="sticky bottom-0 flex justify-end gap-2 border-t border-zinc-100 bg-white pb-2 pt-4">
             <button
               type="button"
               className="rounded-xl border border-zinc-200 px-4 py-2 font-medium"
