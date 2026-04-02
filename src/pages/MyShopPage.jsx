@@ -2122,9 +2122,18 @@ class EditProfileModal extends React.Component {
             </div>
           </div>
 
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <Field label="ชื่อจริง" value={user?.firstName} onChange={(v) => onChangeField("firstName", v)} />
+            <Field label="นามสกุล" value={user?.lastName} onChange={(v) => onChangeField("lastName", v)} />
+          </div>
+
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            ชื่อจริงและนามสกุลไม่แสดงต่อสาธารณะ ใช้สำหรับ KYC และตรวจสอบความตรงกันกับชื่อบัญชีธนาคารเท่านั้น
+          </div>
+
           <SavedAddressesEditor
             addresses={user?.addresses}
-            defaultName={user?.name}
+            defaultName={user?.getPrivateFullName?.() || user?.name}
             defaultPhone={user?.phone}
             onChange={(nextAddresses) => {
               onChangeField("addresses", nextAddresses);
