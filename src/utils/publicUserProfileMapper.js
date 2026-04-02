@@ -19,8 +19,8 @@ const mapPublicUser = (user, baseUrl = "") => {
     username: user.username ?? "",
     name: user.name || user.username || "",
     avatarUrl: toAbsoluteUrl(user.avatarUrl, baseUrl),
-    email: user.email ?? "",
-    phone: user.phone ?? "",
+    email: "",
+    phone: "",
     role: user.role ?? "user",
     createdAt: user.createdAt ?? null,
   };

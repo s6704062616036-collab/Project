@@ -148,12 +148,35 @@ const updateMyProfile = async (req, res) => {
       user.lastName = req.body.lastName.trim();
     }
 
+    const nextUsername =
+      typeof req.body.username === "string" ? req.body.username.trim() : user.username;
+    const nextEmail =
+      typeof req.body.email === "string" ? normalizeEmail(req.body.email) : user.email;
+
+    const conflictingUser = await User.findOne({
+      _id: { $ne: user._id },
+      $or: [
+        { username: nextUsername },
+        { email: nextEmail },
+      ],
+    }).select("_id username email");
+
+    if (conflictingUser) {
+      const isEmailConflict =
+        normalizeEmail(conflictingUser.email) === nextEmail;
+
+      return res.status(400).json({
+        success: false,
+        message: isEmailConflict ? "Email already exists" : "Username already exists",
+      });
+    }
+
     if (typeof req.body.username === "string") {
-      user.username = req.body.username.trim();
+      user.username = nextUsername;
     }
 
     if (typeof req.body.email === "string") {
-      user.email = normalizeEmail(req.body.email);
+      user.email = nextEmail;
     }
 
     if (typeof req.body.phone === "string") {

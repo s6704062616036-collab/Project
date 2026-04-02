@@ -58,7 +58,7 @@ const submitProductReport = async (req, res) => {
       shopName: shop?.shopName ?? "",
       shopAvatarUrl: shop?.avatarUrl ?? "",
       reporterId: req.user.id,
-      reporterName: reporter?.name ?? reporter?.username ?? reporter?.email ?? "",
+      reporterName: reporter?.name ?? reporter?.username ?? "ผู้ใช้งาน",
       reason,
       source: `${req.body?.source ?? ""}`.trim(),
     });
@@ -130,7 +130,7 @@ const submitShopReport = async (req, res) => {
       shopName: shop.shopName ?? "",
       shopAvatarUrl: shop.avatarUrl ?? "",
       reporterId: req.user.id,
-      reporterName: reporter?.name ?? reporter?.username ?? reporter?.email ?? "",
+      reporterName: reporter?.name ?? reporter?.username ?? "ผู้ใช้งาน",
       reason,
       source: `${req.body?.source ?? ""}`.trim(),
     });
@@ -167,7 +167,7 @@ const submitShopReport = async (req, res) => {
 
 const listReports = async (req, res) => {
   try {
-    const reports = await Report.find({}).sort({ createdAt: -1 }).lean();
+    const reports = await Report.find({ status: "open" }).sort({ createdAt: -1 }).lean();
     const productIds = [...new Set(reports.map((report) => `${report?.productId ?? ""}`).filter(Boolean))];
     const shopIds = [...new Set(reports.map((report) => `${report?.shopId ?? ""}`).filter(Boolean))];
 
@@ -311,6 +311,7 @@ const reviewReport = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: action === "take_down" ? "ดำเนินการกับรายงานแล้ว" : "ปิดรายงานแล้ว",
+      deletedReportId: report._id.toString(),
       report: mapReport(report.toObject(), getApiBaseUrl(req)),
     });
   } catch (error) {

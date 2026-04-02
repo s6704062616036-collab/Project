@@ -65,11 +65,19 @@ const register = async (req, res) => {
       });
     }
 
-    const existingUser = await User.findOne({ email });
+    const existingUser = await User.findOne({
+      $or: [
+        { email },
+        { username },
+      ],
+    });
     if (existingUser) {
       return res.status(400).json({
         success: false,
-        message: "Email already exists"
+        message:
+          normalizeEmail(existingUser.email) === email
+            ? "Email already exists"
+            : "Username already exists"
       });
     }
 
@@ -108,7 +116,7 @@ const register = async (req, res) => {
     if (error.code === 11000) {
       return res.status(400).json({
         success: false,
-        message: "Email already exists"
+        message: "Email or username already exists"
       });
     }
 
