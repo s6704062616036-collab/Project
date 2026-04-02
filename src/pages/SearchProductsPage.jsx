@@ -585,6 +585,15 @@ class EditProfileModal extends React.Component {
             </div>
           </div>
 
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            ชื่อจริงและนามสกุลไม่แสดงต่อสาธารณะ ใช้สำหรับ KYC และตรวจสอบความตรงกันกับชื่อบัญชีธนาคารเท่านั้น
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <Field label="ชื่อจริง" value={user?.firstName} onChange={(v) => onChangeField("firstName", v)} />
+            <Field label="นามสกุล" value={user?.lastName} onChange={(v) => onChangeField("lastName", v)} />
+          </div>
+
           <div className="flex flex-wrap items-center justify-between gap-3">
             <button
               className="rounded-xl border border-red-200 px-4 py-2 font-semibold text-red-600 hover:bg-red-50 disabled:opacity-60"
@@ -689,9 +698,18 @@ class MultiAddressEditProfileModal extends React.Component {
             </div>
           </div>
 
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            ชื่อจริงและนามสกุลไม่แสดงต่อสาธารณะ ใช้สำหรับ KYC และตรวจสอบความตรงกันกับชื่อบัญชีธนาคารเท่านั้น
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <Field label="ชื่อจริง" value={user?.firstName} onChange={(v) => onChangeField("firstName", v)} />
+            <Field label="นามสกุล" value={user?.lastName} onChange={(v) => onChangeField("lastName", v)} />
+          </div>
+
           <SavedAddressesEditor
             addresses={user?.addresses}
-            defaultName={user?.name}
+            defaultName={user?.getPrivateFullName?.() || user?.name}
             defaultPhone={user?.phone}
             onChange={(nextAddresses) => {
               onChangeField("addresses", nextAddresses);

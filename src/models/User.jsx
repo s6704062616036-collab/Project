@@ -51,9 +51,11 @@ const toAbsoluteApiUrl = (value) => {
 };
 
 export class User {
-  constructor({ id, name, email, avatarUrl, phone, address, addresses, username, role, kycStatus, banStatus, createdAt } = {}) {
+  constructor({ id, name, firstName, lastName, email, avatarUrl, phone, address, addresses, username, role, kycStatus, banStatus, createdAt } = {}) {
     this.id = id ?? "";
     this.name = name ?? "";
+    this.firstName = firstName ?? "";
+    this.lastName = lastName ?? "";
     this.email = email ?? "";
     this.avatarUrl = toAbsoluteApiUrl(avatarUrl);
     this.phone = phone ?? "";
@@ -102,6 +104,8 @@ export class User {
     return new User({
       id: json.id ?? json._id,
       name: json.name,
+      firstName: json.firstName,
+      lastName: json.lastName,
       email: json.email,
       avatarUrl: json.avatarUrl,
       phone: json.phone,
@@ -118,6 +122,8 @@ export class User {
   toEditablePayload() {
     return {
       name: this.name,
+      firstName: this.firstName,
+      lastName: this.lastName,
       email: this.email,
       phone: this.phone,
       address: this.address,
@@ -160,5 +166,9 @@ export class User {
 
   getContactPhone() {
     return `${this.phone ?? ""}`.trim();
+  }
+
+  getPrivateFullName() {
+    return [this.firstName, this.lastName].map(safeText).filter(Boolean).join(" ").trim();
   }
 }
