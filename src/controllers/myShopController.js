@@ -1,9 +1,11 @@
 const Shop = require("../models/Shop");
 const Product = require("../models/Product");
+const User = require("../models/User");
 const mongoose = require("mongoose");
 const { assertApprovedShopForSelling } = require("../services/shopKycService");
 const { notifyAdmins } = require("../services/notificationService");
 const { saveUploadedFile, saveUploadedFiles } = require("../services/fileStorageService");
+const serializeUser = require("../utils/serializeUser");
 
 const normalizeProductStatus = (value) => {
   const normalizedValue = `${value ?? ""}`.trim().toLowerCase();
@@ -33,6 +35,7 @@ const normalizeBirthDate = (value) => {
 };
 
 const normalizeProvince = (value) => `${value ?? ""}`.trim().slice(0, 100);
+const normalizeLegalName = (value) => `${value ?? ""}`.trim().slice(0, 120);
 
 const normalizeBankAccountNumber = (value) =>
   `${value ?? ""}`
@@ -102,11 +105,14 @@ const getMyShop = async (req, res) => {
 };
 
 const upsertMyShop = async (req, res) => {
+  let session = null;
   try {
     const {
       shopName,
       citizenId,
       kycCitizenId,
+      firstName,
+      lastName,
       birthDate,
       province,
       description,
@@ -122,73 +128,101 @@ const upsertMyShop = async (req, res) => {
       ? await saveUploadedFile(req.file, { folder: "secondhand/shops/qr" })
       : undefined;
     const normalizedCitizenId = `${citizenId ?? kycCitizenId ?? ""}`.replace(/\D+/g, "").slice(0, 13);
+    const normalizedFirstName = normalizeLegalName(firstName);
+    const normalizedLastName = normalizeLegalName(lastName);
     const normalizedBirthDate = normalizeBirthDate(birthDate);
     const normalizedProvince = normalizeProvince(province);
     const normalizedBankAccountNumber = normalizeBankAccountNumber(bankAccountNumber);
+    let user = null;
+    let shop = null;
+    let shouldNotifyAdmins = false;
 
-    const existingShop = await Shop.findOne({ owner: req.user.id });
-    const nextCitizenId = normalizedCitizenId || existingShop?.citizenId || "";
-    const nextParcelQrCodeUrl =
-      uploadedQrPath ??
-      parcelQrCodeUrl ??
-      existingShop?.parcelQrCodeUrl ??
-      "";
-    const hasKycEvidence = Boolean(nextCitizenId || nextParcelQrCodeUrl);
-    const hasEvidenceChanged =
-      nextCitizenId !== (existingShop?.citizenId ?? "") ||
-      nextParcelQrCodeUrl !== (existingShop?.parcelQrCodeUrl ?? "");
-    let nextKycStatus = existingShop?.kycStatus ?? "unsubmitted";
-    let nextKycSubmittedAt = existingShop?.kycSubmittedAt ?? null;
-    let nextKycReviewedAt = existingShop?.kycReviewedAt ?? null;
-    let nextKycApprovedAt = existingShop?.kycApprovedAt ?? null;
-    let nextModerationNote = existingShop?.moderationNote ?? "";
+    session = await mongoose.startSession();
+    await session.withTransaction(async () => {
+      user = await User.findById(req.user.id).select("-password").session(session);
 
-    if (!hasKycEvidence) {
-      nextKycStatus = "unsubmitted";
-      nextKycSubmittedAt = null;
-      nextKycReviewedAt = null;
-      nextKycApprovedAt = null;
-      nextModerationNote = "";
-    } else if (!existingShop || hasEvidenceChanged || !["pending", "approved", "rejected"].includes(existingShop?.kycStatus)) {
-      nextKycStatus = "pending";
-      nextKycSubmittedAt = new Date();
-      nextKycReviewedAt = null;
-      nextKycApprovedAt = null;
-      nextModerationNote = "";
-    }
-
-    const shop = await Shop.findOneAndUpdate(
-      { owner: req.user.id },
-      {
-        owner: req.user.id,
-        shopName: shopName ?? existingShop?.shopName ?? "",
-        citizenId: nextCitizenId,
-        birthDate: normalizedBirthDate || existingShop?.birthDate || "",
-        province: province === undefined ? existingShop?.province ?? "" : normalizedProvince,
-        description: description ?? existingShop?.description ?? "",
-        contact: contact ?? existingShop?.contact ?? "",
-        avatarUrl: avatarUrl ?? existingShop?.avatarUrl ?? "",
-        parcelQrCodeUrl: nextParcelQrCodeUrl,
-        bankName: `${bankName ?? existingShop?.bankName ?? ""}`.trim(),
-        bankAccountName: `${bankAccountName ?? existingShop?.bankAccountName ?? ""}`.trim(),
-        bankAccountNumber: normalizedBankAccountNumber || existingShop?.bankAccountNumber || "",
-        kycStatus: nextKycStatus,
-        kycSubmittedAt: nextKycSubmittedAt,
-        kycReviewedAt: nextKycReviewedAt,
-        kycApprovedAt: nextKycApprovedAt,
-        moderationNote: nextModerationNote,
-      },
-      {
-        new: true,
-        upsert: true,
-        setDefaultsOnInsert: true,
+      if (!user) {
+        const missingUserError = new Error("User not found");
+        missingUserError.statusCode = 404;
+        throw missingUserError;
       }
-    );
-    const shouldNotifyAdmins =
-      nextKycStatus === "pending" &&
-      (!existingShop ||
-        hasEvidenceChanged ||
-        `${existingShop?.kycStatus ?? ""}`.trim().toLowerCase() !== "pending");
+
+      const existingShop = await Shop.findOne({ owner: req.user.id }).session(session);
+      const nextCitizenId = normalizedCitizenId || existingShop?.citizenId || "";
+      const nextParcelQrCodeUrl =
+        uploadedQrPath ??
+        parcelQrCodeUrl ??
+        existingShop?.parcelQrCodeUrl ??
+        "";
+      const hasKycEvidence = Boolean(nextCitizenId || nextParcelQrCodeUrl);
+      const hasEvidenceChanged =
+        nextCitizenId !== (existingShop?.citizenId ?? "") ||
+        nextParcelQrCodeUrl !== (existingShop?.parcelQrCodeUrl ?? "");
+      let nextKycStatus = existingShop?.kycStatus ?? "unsubmitted";
+      let nextKycSubmittedAt = existingShop?.kycSubmittedAt ?? null;
+      let nextKycReviewedAt = existingShop?.kycReviewedAt ?? null;
+      let nextKycApprovedAt = existingShop?.kycApprovedAt ?? null;
+      let nextModerationNote = existingShop?.moderationNote ?? "";
+
+      if (!hasKycEvidence) {
+        nextKycStatus = "unsubmitted";
+        nextKycSubmittedAt = null;
+        nextKycReviewedAt = null;
+        nextKycApprovedAt = null;
+        nextModerationNote = "";
+      } else if (!existingShop || hasEvidenceChanged || !["pending", "approved", "rejected"].includes(existingShop?.kycStatus)) {
+        nextKycStatus = "pending";
+        nextKycSubmittedAt = new Date();
+        nextKycReviewedAt = null;
+        nextKycApprovedAt = null;
+        nextModerationNote = "";
+      }
+
+      if (firstName !== undefined) {
+        user.firstName = normalizedFirstName;
+      }
+
+      if (lastName !== undefined) {
+        user.lastName = normalizedLastName;
+      }
+
+      shop = await Shop.findOneAndUpdate(
+        { owner: req.user.id },
+        {
+          owner: req.user.id,
+          shopName: shopName ?? existingShop?.shopName ?? "",
+          citizenId: nextCitizenId,
+          birthDate: normalizedBirthDate || existingShop?.birthDate || "",
+          province: province === undefined ? existingShop?.province ?? "" : normalizedProvince,
+          description: description ?? existingShop?.description ?? "",
+          contact: contact ?? existingShop?.contact ?? "",
+          avatarUrl: avatarUrl ?? existingShop?.avatarUrl ?? "",
+          parcelQrCodeUrl: nextParcelQrCodeUrl,
+          bankName: `${bankName ?? existingShop?.bankName ?? ""}`.trim(),
+          bankAccountName: `${bankAccountName ?? existingShop?.bankAccountName ?? ""}`.trim(),
+          bankAccountNumber: normalizedBankAccountNumber || existingShop?.bankAccountNumber || "",
+          kycStatus: nextKycStatus,
+          kycSubmittedAt: nextKycSubmittedAt,
+          kycReviewedAt: nextKycReviewedAt,
+          kycApprovedAt: nextKycApprovedAt,
+          moderationNote: nextModerationNote,
+        },
+        {
+          new: true,
+          upsert: true,
+          setDefaultsOnInsert: true,
+          session,
+        }
+      );
+
+      await user.save({ session });
+
+      shouldNotifyAdmins =
+        nextKycStatus === "pending" &&
+        (!existingShop ||
+          hasEvidenceChanged ||
+          `${existingShop?.kycStatus ?? ""}`.trim().toLowerCase() !== "pending");
+    });
 
     if (shouldNotifyAdmins) {
       await notifyAdmins({
@@ -214,13 +248,25 @@ const upsertMyShop = async (req, res) => {
       success: true,
       message: "Shop saved successfully",
       shop: mapShop(shop),
+      user: serializeUser(user),
     });
   } catch (error) {
+    if (error?.statusCode === 404) {
+      return res.status(404).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
     return res.status(500).json({
       success: false,
       message: "Server error while saving shop",
       error: error.message,
     });
+  } finally {
+    if (session) {
+      await session.endSession();
+    }
   }
 };
 

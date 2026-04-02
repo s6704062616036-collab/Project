@@ -34,11 +34,6 @@ const buildUsername = ({ username, firstName, lastName, email }) => {
   const directUsername = normalizeLoginIdentifier(username);
   if (directUsername) return directUsername;
 
-  const first = normalizeLoginIdentifier(firstName).toLowerCase();
-  const last = normalizeLoginIdentifier(lastName).toLowerCase();
-  const joinedName = [first, last].filter(Boolean).join(".");
-  if (joinedName) return joinedName;
-
   const normalizedEmail = normalizeEmail(email);
   if (normalizedEmail.includes("@")) {
     return normalizedEmail.split("@")[0];
