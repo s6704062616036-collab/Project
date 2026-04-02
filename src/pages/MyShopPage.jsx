@@ -1559,7 +1559,7 @@ class ProductCard extends React.Component {
 
         <div className="pt-3 space-y-1">
           <div className="flex items-start justify-between gap-2">
-            <div className="space-y-1">
+            <div className="min-w-0 flex-1 space-y-1 [&>div:first-child]:break-words [&>div:first-child]:[overflow-wrap:anywhere] [&>div:first-child]:overflow-hidden [&>div:first-child]:[-webkit-box-orient:vertical] [&>div:first-child]:[-webkit-line-clamp:2] [&>div:first-child]:[display:-webkit-box]">
               <div className="font-semibold break-words">{product.name || "ไม่ระบุชื่อสินค้า"}</div>
               <div
                 className={`inline-flex w-fit rounded-full px-2 py-0.5 text-[11px] font-semibold ${
@@ -1594,8 +1594,16 @@ class ProductCard extends React.Component {
           {product.getProvinceLabel?.() ? (
             <div className="text-xs text-zinc-500">จังหวัด: {product.getProvinceLabel()}</div>
           ) : null}
-          <div className="text-sm font-medium text-zinc-700">{product.getPriceLabel()}</div>
-          <p className="text-sm text-zinc-500 whitespace-pre-line break-words">
+          <div className="text-sm font-medium text-zinc-700 break-words [overflow-wrap:anywhere]">{product.getPriceLabel()}</div>
+          <p
+            className="text-sm text-zinc-500 whitespace-pre-line break-words [overflow-wrap:anywhere]"
+            style={{
+              display: "-webkit-box",
+              WebkitLineClamp: 5,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden",
+            }}
+          >
             {product.description || "ไม่มีคำอธิบาย"}
           </p>
         </div>
