@@ -260,6 +260,9 @@ textarea {
 }
 
 .app-modal-overlay {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding: 1rem;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -270,7 +273,7 @@ textarea {
 
 .app-modal-card {
   width: min(100%, 48rem);
-  margin: clamp(1rem, 6dvh, 4rem) auto;
+  margin: auto;
   max-height: calc(100dvh - 2rem);
   overflow-y: auto;
 }
