@@ -15,6 +15,8 @@ const TYPE_LABELS = {
   parcel_order_approved: "ร้านอนุมัติคำสั่งซื้อ",
   parcel_order_cancelled: "ร้านยกเลิกคำสั่งซื้อ",
   parcel_order_reported: "คำสั่งซื้อถูกรายงาน",
+  parcel_preparing: "ร้านค้ากำลังเตรียมจัดส่ง",
+  parcel_shipped: "ร้านค้าจัดส่งพัสดุแล้ว",
   kyc_submitted: "มีคำขอ KYC",
   kyc_approved: "KYC ผ่านแล้ว",
   kyc_rejected: "KYC ไม่ผ่าน",

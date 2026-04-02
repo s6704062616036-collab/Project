@@ -124,6 +124,32 @@ export class NotificationsPage extends React.Component {
     );
   }
 
+  renderParcelDetails(notification) {
+    const type = `${notification?.type ?? ""}`.trim();
+    if (!["parcel_preparing", "parcel_shipped"].includes(type)) return null;
+
+    const trackingNumber = `${notification?.metadata?.trackingNumber ?? ""}`.trim();
+    const carrier = `${notification?.metadata?.carrier ?? ""}`.trim();
+    const note = `${notification?.metadata?.note ?? ""}`.trim();
+    const shopName = `${notification?.metadata?.shopName ?? ""}`.trim();
+
+    if (!trackingNumber && !carrier && !note && !shopName) return null;
+
+    return (
+      <div className="rounded-2xl border border-sky-200 bg-sky-50/80 px-3.5 py-3 text-sm text-sky-900">
+        <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-sky-700">
+          รายละเอียดการจัดส่ง
+        </div>
+        <div className="space-y-1.5">
+          {shopName ? <div><span className="font-semibold">ร้านค้า:</span> {shopName}</div> : null}
+          {carrier ? <div><span className="font-semibold">บริษัทขนส่ง:</span> {carrier}</div> : null}
+          {trackingNumber ? <div><span className="font-semibold">เลขพัสดุ:</span> {trackingNumber}</div> : null}
+          {note ? <div><span className="font-semibold">หมายเหตุ:</span> {note}</div> : null}
+        </div>
+      </div>
+    );
+  }
+
   renderNotificationCard(notification) {
     const isUnread = notification?.isUnread?.() ?? false;
     const targetLabel = notification?.hasTarget?.() ? "เปิดดู" : "";
@@ -165,6 +191,7 @@ export class NotificationsPage extends React.Component {
                 {notification.message}
               </div>
             ) : null}
+            {this.renderParcelDetails(notification)}
             <div className="text-xs text-zinc-500">
               {notification?.getCreatedAtLabel?.() ?? "-"}
             </div>
